@@ -1,0 +1,65 @@
+{
+    "pipeline_steps": {
+        "run_baseline": true,
+        "run_watermark": true,
+        "run_evaluation": true,
+        "run_decoding": true,
+        "run_analysis": true
+    },
+    "common_config": {
+        "_comment": "Paths relative to project root. Adjust if your data is elsewhere.",
+        "data_root": "experiments/toolbench/data/data",
+        "toolenv_root": "experiments/toolbench/data/data/toolenv/tools",
+        "cache_root": "experiments/toolbench/data/fake_response_cache",
+        "use_local_model": false,
+        "api_key": "${OPENAI_API_KEY}",
+        "base_url": "https://api.deepseek.com",
+        "model": "deepseek-chat",
+        "split": "G1_instruction",
+        "splits": [
+            "G1_instruction"
+        ],
+        "task_limit": 1,
+        "filter_failed_reference": true,
+        "max_steps": 10,
+        "verbose": true,
+        "seed": 2025,
+        "shuffle": false,
+        "temperature": 0.7
+    },
+    "watermark_specific": {
+        "mode": "watermark",
+        "run_name": "exp_watermark",
+        "bit_stream_path": "agentmark/data/bit_stream.txt",
+        "sampling_strategy": "differential",
+        "watermark_config": {
+            "embedding_strategy": "cyclic",
+            "payload_bit_length": 8,
+            "use_rlnc": true
+        }
+    },
+    "baseline_specific": {
+        "mode": "baseline",
+        "run_name": "exp_baseline",
+        "temperature": 0.7
+    },
+    "eval": {
+        "enable": true,
+        "convert_script": "experiments/toolbench/tools/stable_toolbench_eval/convert_to_answer_format.py",
+        "eval_script": "experiments/toolbench/tools/stable_toolbench_eval/eval_pass_rate.py",
+        "test_ids": "experiments/toolbench/data/data/test_query_ids",
+        "reference_dir": "experiments/toolbench/data/data/answer/G1_answer",
+        "method": "agentmark",
+        "output_dir": "output/tooleval_converted"
+    },
+    "decode_config": {
+        "bit_stream_path": "agentmark/data/bit_stream.txt",
+        "script": "experiments/rlnc_trajectory/scripts/decode_toolbench_watermark.py",
+        "output": "output/watermark_decode/summary.json",
+        "simulate_packet_loss": true,
+        "packet_loss_ratio": 0.5
+    },
+    "analysis_config": {
+        "script": "experiments/toolbench/scripts/analysis/generate_detailed_report.py"
+    }
+}

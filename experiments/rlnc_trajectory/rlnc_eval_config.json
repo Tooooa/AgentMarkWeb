@@ -1,0 +1,16 @@
+{
+    "pred_dir": "output/toolbench_predictions/G3_instruction_20/exp_v5_fake_response_watermark",
+    "rlnc_meta_path": "output/toolbench_predictions/G3_instruction_20/exp_v5_fake_response_watermark/rlnc_meta.json",
+    "output_dir": "output/toolbench_predictions/G3_instruction_20/exp_v5_fake_response_watermark/rlnc_eval_results_new",
+    "decode_params": {
+        "simulate_loss": true,
+        "loss_ratio": 0.5,
+        "scope": "episode"
+    },
+    "robustness_params": {
+        "p_list": "0,0.1,0.2,0.3,0.4,0.5,0.6",
+        "trials": 10,
+        "mode": "iid",
+        "scope": "episode"
+    }
+}

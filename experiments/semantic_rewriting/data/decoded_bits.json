@@ -1,0 +1,12 @@
+[
+  {
+    "task_index": 0,
+    "task_id": 0,
+    "task_type": "look_at_obj_in_light",
+    "decoded_bit_stream": "110011011100110111001101110011011100110111001101110011011100110",
+    "total_bits": 63,
+    "expected_bits": 63,
+    "verified": true,
+    "errors": []
+  }
+]

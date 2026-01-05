@@ -1,0 +1,8 @@
+{
+    "pred_dirs": [],
+    "test_n": 128,
+    "trials": 1000,
+    "max_k": 16,
+    "step_k": 2,
+    "output_dir": "output/rlnc_trajectory"
+}

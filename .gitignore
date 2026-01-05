@@ -1,0 +1,38 @@
+# General
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.DS_Store
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Data & Output
+# Ignore large data directories or generated outputs if needed
+data/
+!experiments/semantic_rewriting/data/
+!agentmark/data/
+output/
+experiments/toolbench/data/
+experiments/oasis_watermark/oasis/outputs/
+
+# Logs
+*.log
+log/
+
+# MarkLLM Large Files
+experiments/toolbench/MarkLLM/dataset/
+experiments/toolbench/MarkLLM/watermark/xsir/dictionary/

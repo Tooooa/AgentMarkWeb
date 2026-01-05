@@ -1,0 +1,74 @@
+# ALFWorld base configuration
+# Based on ALFWorld official base_config.yaml
+# Used for AgentMark ALFWorld benchmark evaluation
+
+dataset:
+  # Dataset paths (uses env var $ALFWORLD_DATA when applicable)
+  # Note: YAML usually does not expand "~", so use absolute paths here
+  data_path: '/root/.cache/alfworld/json_2.1.1/train'
+  eval_id_data_path: '/root/.cache/alfworld/json_2.1.1/valid_seen'
+  eval_ood_data_path: '/root/.cache/alfworld/json_2.1.1/valid_unseen'
+
+  # Number of training/eval tasks
+  # -1 uses all available tasks
+  num_train_games: -1
+  num_eval_games: -1  # Limit eval tasks to speed up experiments
+
+logic:
+  # PDDL domain definitions and grammar files
+  # Uses the logic files bundled with alfworld
+  domain: '/root/miniconda3/envs/toolbench/lib/python3.9/site-packages/alfworld/data/alfred.pddl'
+  grammar: '/root/miniconda3/envs/toolbench/lib/python3.9/site-packages/alfworld/data/alfred.twl2'
+
+env:
+  # Environment type: AlfredTWEnv (text), AlfredThorEnv (visual), AlfredHybrid (mixed)
+  type: 'AlfredTWEnv'
+
+  # Domain randomization (randomize object IDs and print order)
+  domain_randomization: False
+
+  # Task types (1-6)
+  # 1: pick_and_place_simple
+  # 2: look_at_obj_in_light
+  # 3: pick_clean_then_place_in_recep
+  # 4: pick_heat_then_place_in_recep
+  # 5: pick_cool_then_place_in_recep
+  # 6: pick_two_obj_and_place
+  task_types: [1, 2, 3, 4, 5, 6]  # All task types
+
+  # Expert timeout steps
+  expert_timeout_steps: 150
+
+  # Expert type
+  expert_type: "handcoded"
+
+  # Probability of using human-annotated goal descriptions
+  goal_desc_human_anns_prob: 0.0
+
+general:
+  # Random seed (reproducibility)
+  random_seed: 2025
+
+  # Whether to use CUDA (text environment does not need GPU)
+  use_cuda: False
+
+  # Training method (dagger, dqn, etc.)
+  training_method: 'dagger'
+
+  # Train/eval mode
+  training:
+    batch_size: 1
+    max_episode_length: 50
+
+  evaluate:
+    batch_size: 1
+    max_episode_length: 50
+
+# DAgger training config
+dagger:
+  training:
+    max_nb_steps_per_episode: 50
+    batch_size: 1
+
+  evaluate:
+    batch_size: 1

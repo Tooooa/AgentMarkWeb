@@ -1,0 +1,94 @@
+{
+    "_comment_pipeline": "Pipeline control flags",
+    "pipeline_steps": {
+        "run_baseline": true,
+        "run_watermark": true,
+        "run_evaluation": false,
+        "run_decoding": false,
+        "run_analysis": false
+    },
+    "_comment_common": "Common config",
+    "common_config": {
+        "_comment": "Paths relative to project root",
+        "data_root": "experiments/toolbench/data/data",
+        "toolenv_root": "experiments/toolbench/data/data/toolenv/tools",
+        "cache_root": "experiments/toolbench/data/fake_response_cache",
+        "use_local_model": true,
+        "model": "meta-llama/Llama-3.2-3B-Instruct",
+        "local_model_path": "${LOCAL_MODEL_PATH}",
+        "api_key": "none",
+        "base_url": "none",
+        "text_watermark_config": {
+            "ngram_len": 5,
+            "keys": [
+                654,
+                400,
+                836,
+                123,
+                340,
+                443,
+                597,
+                160,
+                57,
+                29,
+                590,
+                639,
+                13,
+                715,
+                468,
+                990,
+                966,
+                226,
+                324,
+                585,
+                118,
+                504,
+                421,
+                521,
+                129,
+                669,
+                732,
+                225,
+                90,
+                960
+            ],
+            "sampling_table_size": 65536,
+            "sampling_table_seed": 0,
+            "context_history_size": 1024,
+            "detector_type": "weighted_mean",
+            "threshold": 0.50,
+            "watermark_mode": "distortionary",
+            "num_leaves": 4
+        },
+        "split": "G1_instruction",
+        "splits": [
+            "G1_instruction"
+        ],
+        "task_limit": 25,
+        "filter_failed_reference": true,
+        "max_steps": 6,
+        "verbose": true,
+        "seed": 2025,
+        "shuffle": false
+    },
+    "watermark_specific": {
+        "mode": "watermark",
+        "run_name": "exp_toolbench_local_sythonid",
+        "temperature": 1.0,
+        "bit_stream_path": "agentmark/data/bit_stream.txt",
+        "watermark_config": {
+            "embedding_strategy": "cyclic",
+            "payload_bit_length": 8,
+            "use_rlnc": false
+        }
+    },
+    "baseline_specific": {
+        "mode": "baseline"
+    },
+    "eval": {
+        "enable": false
+    },
+    "decode_config": {
+        "script": "experiments/rlnc_trajectory/decode_toolbench_watermark.py"
+    }
+}

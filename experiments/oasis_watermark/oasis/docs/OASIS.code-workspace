@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"name": "oasis",
+			"path": ".."
+		}
+	],
+	"settings": {
+		"powershell.cwd": "oasis"
+	}
+}
