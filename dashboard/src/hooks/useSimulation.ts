@@ -10,7 +10,7 @@ export const useSimulation = () => {
     const [activeScenarioId, setActiveScenarioId] = useState<string>(scenarios[0].id);
 
     // Live State
-    const [isLiveMode, setIsLiveMode] = useState(false);
+    const [isLiveMode, setIsLiveMode] = useState(true);
     const [apiKey, setApiKey] = useState("sk-7f4e6c78384e4aaab0eb0c59af411618");
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [liveScenario, setLiveScenario] = useState<Trajectory | null>(null);

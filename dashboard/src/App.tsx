@@ -78,6 +78,8 @@ function App() {
               onStart={handleStart}
               initialScenarioId={activeScenarioId}
               initialErasureRate={erasureRate}
+              isLiveMode={isLiveMode}
+              onToggleLiveMode={() => setIsLiveMode(!isLiveMode)}
             />
           ) : (
             <motion.div

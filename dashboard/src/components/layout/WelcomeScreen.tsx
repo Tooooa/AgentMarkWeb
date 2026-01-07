@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, Box, Cpu, Plus, CheckCircle2, ChevronDown, Search } from 'lucide-react';
+import { ArrowRight, Box, Cpu, Plus, CheckCircle2, ChevronDown, Search, Zap } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
 import { scenarios } from '../../data/mockData';
 
@@ -8,11 +8,19 @@ interface WelcomeScreenProps {
     onStart: (config: { scenarioId: string; payload: string; erasureRate: number }) => void;
     initialScenarioId: string;
     initialErasureRate: number;
+    isLiveMode: boolean;
+    onToggleLiveMode: () => void;
 }
 
 type Mode = 'tool' | 'self' | 'add' | null;
 
-const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, initialScenarioId, initialErasureRate }) => {
+const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
+    onStart,
+    initialScenarioId,
+    initialErasureRate,
+    isLiveMode,
+    onToggleLiveMode
+}) => {
     const { locale } = useI18n();
     const [selectedMode, setSelectedMode] = useState<Mode>(null);
 
@@ -40,16 +48,26 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, initialScenarioI
     const isFlipped = selectedMode === 'tool';
 
     return (
-        <div 
+        <div
             className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 font-sans relative overflow-hidden"
         >
-            {/* Click outside handler */}
-            {isFlipped && (
-                <div 
-                    className="fixed inset-0 z-40 bg-white/10 backdrop-blur-sm transition-all"
-                    onClick={() => setSelectedMode(null)}
-                />
-            )}
+            {/* Live Mode Toggle - Top Right (My Logic) */}
+            <div className="absolute top-6 right-6 flex gap-1 bg-slate-100 p-1 rounded-lg z-50">
+                <button
+                    onClick={() => isLiveMode && onToggleLiveMode()}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] uppercase font-bold tracking-wider transition-all ${!isLiveMode ? 'bg-white text-slate-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                >
+                    Simulation
+                </button>
+                <button
+                    onClick={() => !isLiveMode && onToggleLiveMode()}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] uppercase font-bold tracking-wider transition-all ${isLiveMode ? 'bg-rose-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                >
+                    <Zap size={12} fill="currentColor" /> Live
+                </button>
+            </div>
 
             {/* Background elements */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -57,9 +75,16 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, initialScenarioI
                 <div className="absolute top-[40%] -right-[10%] w-[40%] h-[60%] bg-blue-200/20 rounded-full blur-3xl" />
             </div>
 
+            {/* Click outside handler (Remote Layout) */}
+            {isFlipped && (
+                <div
+                    className="fixed inset-0 z-40 bg-white/10 backdrop-blur-sm transition-all"
+                    onClick={() => setSelectedMode(null)}
+                />
+            )}
+
             {/* Header */}
             <motion.div
-                // Removed conditional opacity/y animation to keep header visible
                 initial={{ opacity: 1, y: 0 }}
                 className="text-center mb-12 relative z-10 pointer-events-none"
             >
@@ -67,7 +92,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, initialScenarioI
                 <p className="text-slate-500 text-xl font-medium">Robust Watermarking for LLM Agents</p>
             </motion.div>
 
-            {/* Main Container - Flexbox for robust alignment */}
+            {/* Main Container - Flexbox (Remote Layout) */}
             <div className="w-full max-w-7xl flex items-center justify-center gap-6 relative z-50 h-[600px] perspective-1000">
                 <AnimatePresence>
                     {modes.map((mode) => {
@@ -79,7 +104,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, initialScenarioI
                                 key={mode.id}
                                 layout
                                 initial={false}
-                                animate={{ 
+                                animate={{
                                     width: isActive ? 700 : 256,
                                     height: isActive ? 450 : 320,
                                     opacity: 1, // Always visible
@@ -87,13 +112,9 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, initialScenarioI
                                 }}
                                 transition={{ type: "spring", stiffness: 200, damping: 25 }}
                                 onClick={() => !isActive && setSelectedMode(mode.id as Mode)}
-                                className={`relative rounded-3xl bg-white shadow-xl ${
-                                    isActive ? 'cursor-default' : 'cursor-pointer hover:shadow-2xl hover:-translate-y-1'
-                                } transition-shadow overflow-visible`}
-                                style={{ 
-                                    // Make sure non-active cards are still interactive if we want them to be switchable? 
-                                    // User flow: Click Tool -> It expands. Click Self -> Tool closes, Self expands? 
-                                    // For now, let's allow switching.
+                                className={`relative rounded-3xl bg-white shadow-xl ${isActive ? 'cursor-default' : 'cursor-pointer hover:shadow-2xl hover:-translate-y-1'
+                                    } transition-shadow overflow-visible`}
+                                style={{
                                     display: 'block',
                                     zIndex: isActive ? 50 : 10 // Active on top
                                 }}
@@ -101,17 +122,17 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, initialScenarioI
                                 {/* 3D Flipper Container */}
                                 <motion.div
                                     className="w-full h-full relative"
-                                    animate={{ rotateY: isActive && isToolCard ? 180 : 0 }} // Only flip if it is the Tool Card AND it is active
+                                    animate={{ rotateY: isActive && isToolCard ? 180 : 0 }}
                                     transition={{ type: "spring", stiffness: 260, damping: 20 }}
                                     style={{ transformStyle: 'preserve-3d' }}
                                 >
-                                    {/* FRONT FACE */}
-                                    <div 
+                                    {/* FRONT FACE (Remote Style: Title + Desc + Link) */}
+                                    <div
                                         className="absolute inset-0 w-full h-full bg-white rounded-3xl border border-slate-200 flex flex-col items-center justify-center text-center p-6"
-                                        style={{ 
-                                            backfaceVisibility: 'hidden', 
+                                        style={{
+                                            backfaceVisibility: 'hidden',
                                             WebkitBackfaceVisibility: 'hidden',
-                                            zIndex: isActive ? 0 : 1 
+                                            zIndex: isActive ? 0 : 1
                                         }}
                                     >
                                         <div className={`p-5 rounded-2xl mb-6 ${isActive ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-600'}`}>
@@ -126,12 +147,12 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, initialScenarioI
                                         )}
                                     </div>
 
-                                    {/* BACK FACE (Only for Tool Card) */}
+                                    {/* BACK FACE (Configuration Form) */}
                                     {isToolCard && (
-                                        <div 
+                                        <div
                                             className="absolute inset-0 w-full h-full bg-white rounded-3xl border border-indigo-100 shadow-inner p-8 flex flex-col"
-                                            style={{ 
-                                                backfaceVisibility: 'hidden', 
+                                            style={{
+                                                backfaceVisibility: 'hidden',
                                                 WebkitBackfaceVisibility: 'hidden',
                                                 transform: 'rotateY(180deg)',
                                                 zIndex: isActive ? 1 : 0
@@ -146,7 +167,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, initialScenarioI
 
                                             {/* Form */}
                                             <div className="flex-1 space-y-6">
-                                                {/* Prompt */}
+                                                {/* Prompt Input (My Logic Injected Here) */}
                                                 <div>
                                                     <label className="block text-sm font-bold text-slate-700 mb-2">Prompt</label>
                                                     <div className="relative group z-20">
@@ -156,7 +177,8 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, initialScenarioI
                                                             value={promptText}
                                                             onChange={(e) => setPromptText(e.target.value)}
                                                             onFocus={() => setShowScenarioList(true)}
-                                                            placeholder="输入您的请求或选择场景..."
+                                                            onKeyDown={(e) => e.key === 'Enter' && setShowScenarioList(false)}
+                                                            placeholder={locale === 'zh' ? "输入您的请求或选择场景..." : "Enter your query or select a scenario..."}
                                                             className="w-full pl-11 pr-10 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 outline-none transition-all text-sm"
                                                         />
                                                         {/* Dropdown */}
@@ -204,8 +226,8 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, initialScenarioI
                                                             <label className="text-sm font-bold text-slate-700">Loss Rate: {erasureRate}%</label>
                                                         </div>
                                                         <div className="relative h-2 bg-slate-100 rounded-full mt-4">
-                                                            <div 
-                                                                className="absolute h-full bg-indigo-100 rounded-full" 
+                                                            <div
+                                                                className="absolute h-full bg-indigo-100 rounded-full"
                                                                 style={{ width: '100%' }}
                                                             />
                                                             <input
@@ -215,7 +237,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, initialScenarioI
                                                                 onChange={(e) => setErasureRate(Number(e.target.value))}
                                                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                                             />
-                                                            <div 
+                                                            <div
                                                                 className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-indigo-600 rounded-full pointer-events-none shadow-md transition-all"
                                                                 style={{ left: `${(erasureRate / 50) * 100}%` }}
                                                             />

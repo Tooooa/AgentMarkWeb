@@ -126,23 +126,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                     </div>
                 </div>
 
-                {/* Live Mode Toggle */}
-                <div className="flex gap-2 mb-2 bg-slate-800 p-1 rounded-lg">
-                    <button
-                        onClick={onToggleLiveMode}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] uppercase font-bold tracking-wider transition-all ${!isLiveMode ? 'bg-indigo-500 text-white shadow' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-200'
-                            }`}
-                    >
-                        Simulation
-                    </button>
-                    <button
-                        onClick={onToggleLiveMode}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] uppercase font-bold tracking-wider transition-all ${isLiveMode ? 'bg-rose-500 text-white shadow' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-200'
-                            }`}
-                    >
-                        <Zap size={12} /> Live
-                    </button>
-                </div>
+
 
                 {/* View Toggle */}
                 <div className="flex gap-2 mb-4 bg-slate-800 p-1 rounded-lg">

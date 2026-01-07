@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { BarChart, Bar, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
 import type { Step } from '../../data/mockData';
-import { Brain, Terminal, EyeOff, RotateCcw, ArrowRight, Bot, Activity } from 'lucide-react';
+import { Brain, Terminal, EyeOff, RotateCcw, ArrowRight, Activity } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
 import StepDetailModal from './StepDetailModal';
+import robotIcon from '../../assets/robot.svg';
 
 interface StepCardProps {
     step: Step;
@@ -59,11 +60,11 @@ const StepCard: React.FC<StepCardProps> = ({ step, isErased, showWatermarkDetail
         >
             {/* Avatar Column */}
             <div className="flex-shrink-0 flex flex-col items-center gap-2 pt-2">
-                <div className="w-10 h-10 rounded-full bg-indigo-600 shadow-md shadow-indigo-200 flex items-center justify-center text-white z-10 relative">
-                    <Bot size={20} />
+                <div className="w-10 h-10 rounded-full shadow-md shadow-indigo-200 flex items-center justify-center bg-white z-10 relative overflow-hidden">
+                    <img src={robotIcon} alt="Agent" className="w-full h-full object-cover" />
 
                     {/* Step Badge */}
-                    <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500 shadow-sm">
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500 shadow-sm z-20">
                         {step.stepIndex}
                     </div>
                 </div>
