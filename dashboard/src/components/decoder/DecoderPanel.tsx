@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Step } from '../../data/mockData';
-import { CheckCircle2, Lock, ShieldCheck, WifiOff } from 'lucide-react';
+import { CheckCircle2, Lock, Database, FileDigit } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
 
 interface DecoderPanelProps {
@@ -10,15 +10,20 @@ interface DecoderPanelProps {
     targetPayload?: string;
 }
 
-// Fixed payload length for demo
 const REQUIRED_RANK = 16;
 
 const DecoderPanel: React.FC<DecoderPanelProps> = ({ visibleSteps, erasedIndices, targetPayload }) => {
-    const { t } = useI18n();
+    const { locale } = useI18n();
+    const bottomRef = useRef<HTMLDivElement>(null);
 
-    // Filter only valid (non-erased) steps that contribute to the matrix
+    // Auto-scroll
+    useEffect(() => {
+        if (visibleSteps.length > 0) {
+            bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [visibleSteps]);
+
     const validSteps = visibleSteps.filter(s => !erasedIndices.has(s.stepIndex));
-    // Count total equations produced by valid steps
     const currentRank = Math.min(
         validSteps.reduce((acc, step) => acc + (step.watermark.matrixRows?.length || 0), 0),
         REQUIRED_RANK
@@ -27,103 +32,110 @@ const DecoderPanel: React.FC<DecoderPanelProps> = ({ visibleSteps, erasedIndices
     const isSuccess = currentRank >= REQUIRED_RANK;
 
     return (
-        <div className="flex flex-col gap-4 h-full">
+        <div className="flex flex-col gap-4 h-full bg-slate-50/50">
 
-            {/* Status Card */}
-            <div className={`glass p-6 rounded-2xl relative overflow-hidden transition-all duration-500 ${isSuccess ? 'border-emerald-200 bg-emerald-50/50' : ''}`}>
-                {/* Background Pattern */}
-                <div className="absolute top-0 right-0 p-4 opacity-5">
-                    <ShieldCheck size={120} />
-                </div>
-
-                <div className="flex items-center justify-between mb-4">
+            {/* 1. Decoding Status / Progress */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
                     <div>
-                        <h2 className="text-lg font-bold text-slate-800">{t('decoderTitle')}</h2>
-                        <p className="text-xs text-slate-500">{t('decoderSubtitle')}</p>
+                        <h2 className="font-bold text-slate-800 text-sm">{locale === 'zh' ? '解码进度' : 'Decoding Progress'}</h2>
+                        <span className="text-xs text-slate-400 font-mono">RANK: {currentRank}/{REQUIRED_RANK}</span>
                     </div>
-                    <div className={`h-10 w-10 rounded-full flex items-center justify-center ${isSuccess ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'}`}>
-                        {isSuccess ? <CheckCircle2 size={20} /> : <Lock size={18} />}
-                    </div>
+                    {isSuccess ? (
+                        <div className="bg-emerald-100 text-emerald-600 px-2 py-1 rounded-lg flex items-center gap-1 text-xs font-bold">
+                            <CheckCircle2 size={14} /> <span>SUCCESS</span>
+                        </div>
+                    ) : (
+                        <div className="bg-indigo-50 text-indigo-500 px-2 py-1 rounded-lg flex items-center gap-1 text-xs font-bold">
+                            <Lock size={14} /> <span>LOCKED</span>
+                        </div>
+                    )}
                 </div>
 
-                <div className="space-y-2">
-                    <div className="flex justify-between text-xs font-semibold uppercase tracking-wider text-slate-600">
-                        <span>{t('decodingProgress')}</span>
-                        <span>{currentRank} / {REQUIRED_RANK} ({t('rank')})</span>
-                    </div>
-                    <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden">
-                        <div
-                            className={`h-full transition-all duration-700 ease-out ${isSuccess ? 'bg-emerald-500' : 'bg-indigo-500'}`}
-                            style={{ width: `${progress}%` }}
-                        ></div>
-                    </div>
+                {/* Progress Bar */}
+                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <motion.div
+                        className={`h-full ${isSuccess ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${progress}%` }}
+                        transition={{ duration: 0.5 }}
+                    />
                 </div>
 
                 {isSuccess && (
                     <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mt-4 p-3 bg-emerald-100/50 rounded-lg border border-emerald-200 text-emerald-800 text-sm font-mono flex items-center justify-center gap-2"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="bg-emerald-50 rounded border border-emerald-100 p-2 text-center"
                     >
-                        <span>{t('payloadDecoded')}:</span>
-                        <span className="font-bold tracking-[0.2em] bg-white px-2 py-0.5 rounded shadow-sm">{targetPayload || "11001101"}</span>
+                        <p className="text-[10px] text-emerald-600 uppercase tracking-wider mb-1">Payload Recovered</p>
+                        <p className="font-mono text-lg font-bold text-emerald-800 tracking-widest">{targetPayload || "AGENTMARK"}</p>
                     </motion.div>
                 )}
             </div>
 
-            {/* Matrix Visualization */}
-            <div className="glass flex-1 rounded-2xl p-0 flex flex-col overflow-hidden">
-                <div className="p-4 border-b border-slate-100/50 bg-slate-50/50 backdrop-blur-md z-10">
-                    <h3 className="text-xs font-bold uppercase text-slate-500 tracking-wider">{t('matrixTitle')}</h3>
+            {/* 2. Received Datasets List */}
+            <div className="flex-1 overflow-hidden flex flex-col bg-white rounded-2xl shadow-sm border border-slate-100">
+                <div className="p-4 border-b border-slate-50 bg-slate-50/30 flex items-center gap-2">
+                    <Database size={14} className="text-slate-400" />
+                    <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">
+                        {locale === 'zh' ? '接收到的数据集' : 'Received Datasets'}
+                    </h3>
+                    <span className="ml-auto bg-slate-200 text-slate-600 text-[10px] px-1.5 py-0.5 rounded-full font-mono">
+                        {visibleSteps.length}
+                    </span>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-1 scrollbar-hide bg-slate-50/30">
+                <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-hide">
                     <AnimatePresence>
                         {visibleSteps.map((step) => {
                             const isErased = erasedIndices.has(step.stepIndex);
                             return (
                                 <motion.div
                                     key={step.stepIndex}
-                                    initial={{ opacity: 0, x: -20 }}
+                                    initial={{ opacity: 0, x: 20 }}
                                     animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0 }}
-                                    className={`w-full rounded mb-2 border transition-all overflow-hidden ${isErased
-                                        ? 'bg-rose-50 border-rose-100 text-rose-300'
-                                        : 'bg-white border-white/50 shadow-sm'
-                                        }`}
+                                    className={`relative p-3 rounded-xl border transition-all group ${isErased
+                                        ? 'bg-rose-50 border-rose-100 opacity-70 grayscale-[0.5]'
+                                        : 'bg-white border-slate-100 hover:border-indigo-200 hover:shadow-sm'}`}
                                 >
-                                    <div className="flex items-start">
-                                        {/* Step Header / ID */}
-                                        <div className="w-10 p-2 text-[10px] font-mono text-slate-400 border-r border-slate-100/50 flex flex-col items-center justify-center bg-slate-50/50">
-                                            <span>#{step.stepIndex}</span>
-                                            <span className="text-[8px] opacity-70">S{step.stepIndex}</span>
+                                    <div className="flex items-start gap-3">
+                                        {/* Icon Box */}
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isErased ? 'bg-rose-100 text-rose-400' : 'bg-indigo-50 text-indigo-500'}`}>
+                                            <FileDigit size={16} />
                                         </div>
 
-                                        {/* Step Content (Equations) */}
-                                        <div className="flex-1 p-2 flex flex-col gap-1.5">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <span className={`text-xs font-bold ${isErased ? 'text-rose-400' : 'text-slate-700'}`}>
+                                                    Dataset #{step.stepIndex}
+                                                </span>
+                                                <span className="text-[10px] font-mono text-slate-400">
+                                                    {"14:02:23"}
+                                                </span>
+                                            </div>
+
                                             {isErased ? (
-                                                <div className="flex justify-center items-center py-1 gap-2 text-[10px] font-medium tracking-widest text-rose-400">
-                                                    <WifiOff size={12} /> {t('packetLost')}
+                                                <div className="text-[10px] text-rose-400 font-medium bg-rose-100/50 px-2 py-1 rounded inline-block">
+                                                    PACKET LOST
                                                 </div>
                                             ) : (
-                                                // Map through EACH equation/row generated by this step
-                                                step.watermark.matrixRows.map((row, rowIndex) => (
-                                                    <div key={`${step.stepIndex}-${rowIndex}`} className="flex justify-between items-center px-1">
-                                                        {/* Row Index (optional, kept subtle) */}
-                                                        {/* <span className="text-[8px] text-slate-300 mr-2 w-3">{rowIndex + 1}</span> */}
-
-                                                        {/* The Dots */}
-                                                        <div className="flex-1 flex justify-between">
-                                                            {row.map((bit, colIndex) => (
-                                                                <div
-                                                                    key={colIndex}
-                                                                    className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${bit ? 'bg-indigo-500' : 'bg-slate-200'}`}
-                                                                    title={`Bit ${colIndex}`}
-                                                                ></div>
-                                                            ))}
+                                                <div className="space-y-1.5">
+                                                    {/* Matrix Bits Visual */}
+                                                    {step.watermark.matrixRows.map((row, rIdx) => (
+                                                        <div key={rIdx} className="flex items-center gap-1">
+                                                            <span className="text-[8px] text-slate-300 w-3">R{rIdx}</span>
+                                                            <div className="flex gap-1">
+                                                                {row.map((bit, cIdx) => (
+                                                                    <div
+                                                                        key={cIdx}
+                                                                        className={`w-1.5 h-1.5 rounded-full ${bit ? 'bg-indigo-500' : 'bg-slate-200'}`}
+                                                                    />
+                                                                ))}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                ))
+                                                    ))}
+                                                </div>
                                             )}
                                         </div>
                                     </div>
@@ -131,12 +143,7 @@ const DecoderPanel: React.FC<DecoderPanelProps> = ({ visibleSteps, erasedIndices
                             );
                         })}
                     </AnimatePresence>
-
-                    {visibleSteps.length === 0 && (
-                        <div className="h-full flex items-center justify-center text-slate-300 text-xs italic">
-                            {t('matrixEmpty')}
-                        </div>
-                    )}
+                    <div ref={bottomRef} className="h-1" />
                 </div>
             </div>
         </div>

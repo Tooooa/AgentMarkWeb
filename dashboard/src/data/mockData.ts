@@ -80,11 +80,23 @@ const parseToolBenchData = (jsonData: any, manualId: string, titleEn: string, ti
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const relevantDetail = details.filter((d: any) => d.role === 'assistant')[index];
         let thought = "Thinking...";
+        let toolOutput = undefined;
 
-        if (relevantDetail && relevantDetail.message) {
-            const msg = relevantDetail.message;
-            const thoughtMatch = msg.match(/Thought:\s*(.*?)(?=\n|{|$)/s);
-            if (thoughtMatch) thought = thoughtMatch[1].trim();
+        if (relevantDetail) {
+            if (relevantDetail.message) {
+                const msg = relevantDetail.message;
+                const thoughtMatch = msg.match(/Thought:\s*(.*?)(?=\n|{|$)/s);
+                if (thoughtMatch) thought = thoughtMatch[1].trim();
+            }
+
+            // Find valid tool output following this action
+            const detailIndex = details.indexOf(relevantDetail);
+            if (detailIndex !== -1 && detailIndex + 1 < details.length) {
+                const nextMsg = details[detailIndex + 1];
+                if (nextMsg.role === 'tool' || nextMsg.role === 'user') { // Sometimes user simulates tool return
+                    toolOutput = nextMsg.message;
+                }
+            }
         }
 
         // Determine type
@@ -119,6 +131,7 @@ const parseToolBenchData = (jsonData: any, manualId: string, titleEn: string, ti
             stepIndex,
             thought,
             action: isFinish ? "Task Completed" : `Call: ${chosen}`,
+            toolDetails: toolOutput,
             distribution,
             watermark: {
                 bits: bitsStr,

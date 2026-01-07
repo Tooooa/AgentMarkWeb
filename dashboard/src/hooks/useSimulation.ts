@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { scenarios } from '../data/mockData';
 import type { Trajectory, Step } from '../data/mockData';
 import { api } from '../services/api';
-import type { StepResponse } from '../services/api';
+
 
 export const useSimulation = () => {
     // Static State
@@ -11,7 +11,7 @@ export const useSimulation = () => {
 
     // Live State
     const [isLiveMode, setIsLiveMode] = useState(false);
-    const [apiKey, setApiKey] = useState("");
+    const [apiKey, setApiKey] = useState("sk-7f4e6c78384e4aaab0eb0c59af411618");
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [liveScenario, setLiveScenario] = useState<Trajectory | null>(null);
     const [isLoading, setIsLoading] = useState(false);

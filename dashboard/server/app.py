@@ -106,7 +106,7 @@ def get_demo_tasks():
         # Use demo_data for self-contained repo
         path = PROJECT_ROOT / f"demo_data/toolbench_data/{path_suffix}"
         if path.exists():
-            with open(path, 'r') as f:
+            with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 tasks[task_id] = data
     
