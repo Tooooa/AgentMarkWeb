@@ -20,11 +20,16 @@ class ToolBenchRetriever:
         self, 
         data_root: str, 
         model_path: str = "ToolBench/ToolBench_IR_bert_based_uncased",
-        device: str = "cpu"
+        device: str = None
     ):
         self.data_root = Path(data_root)
         self.model_path = model_path
-        self.device = device
+        
+        if device:
+            self.device = device
+        else:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            print(f"[INFO] Using device: {self.device}")
         self.model = None
         self.corpus_embeddings = None
         self.documents: List[Dict] = []
