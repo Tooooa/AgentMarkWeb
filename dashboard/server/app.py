@@ -21,6 +21,21 @@ from agentmark.core.watermark_sampler import sample_behavior_differential
 from agentmark.environments.toolbench.adapter import ToolBenchAdapter
 from agentmark.environments.toolbench.data_loader import ToolBenchDataLoader
 from agentmark.environments.toolbench.prompt import build_messages
+from .retriever import ToolBenchRetriever
+
+# Initialize Retriever
+# Note: Initializing this might take time to load model and index tools
+print("[INFO] Initializing ToolBench Retriever...")
+# Hardcoded path for demo environment, verify this matches actual
+TOOL_DATA_ROOT = PROJECT_ROOT / "experiments/toolbench/data/data/toolenv/tools"
+retriever = ToolBenchRetriever(str(TOOL_DATA_ROOT))
+# Pre-load/index on startup (async or blocking)
+# Blocking for simplicity in this demo server
+try:
+    retriever.load_model()
+    retriever.index_tools()
+except Exception as e:
+    print(f"[ERROR] Failed to initialize retriever: {e}")
 
 app = FastAPI()
 
@@ -83,6 +98,10 @@ class InitRequest(BaseModel):
     apiKey: str
     scenarioId: str # e.g. "3672"
 
+class CustomInitRequest(BaseModel):
+    apiKey: str
+    query: str
+
 class StepRequest(BaseModel):
     sessionId: str
 
@@ -142,6 +161,41 @@ async def init_session(req: InitRequest):
             "id": req.scenarioId
         },
         "totalSteps": 0 # Start
+    }
+
+@app.post("/api/init_custom")
+async def init_custom_session(req: CustomInitRequest):
+    session_id = f"sess_{int(time.time())}_custom"
+    
+    print(f"[INFO] Custom Init Request: {req.query}")
+    
+    # 1. Retrieve relevant APIs
+    api_list = []
+    if retriever:
+        api_list = retriever.retrieve(req.query, top_k=5)
+    
+    if not api_list:
+        print("[WARN] Retriever found no tools or retrieval failed.")
+        
+    # 2. Construct Task Object
+    task = {
+        "query": req.query,
+        "api_list": api_list,
+        "id": "custom_generated"
+    }
+    
+    # 3. Create Session
+    session = Session(session_id, req.apiKey, task)
+    sessions[session_id] = session
+    
+    return {
+        "sessionId": session_id, 
+        "task": {
+            "query": task.get("query"),
+            "id": task.get("id"),
+            "retrieved_tools_count": len(api_list)
+        },
+        "totalSteps": 0
     }
 
 def uniform_prob(commands: List[str]) -> Dict[str, float]:
