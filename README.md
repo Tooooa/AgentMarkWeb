@@ -17,7 +17,7 @@
 ---
 
 
-**AgentMark** is an experimental framework focused on **LLM Agent Behavioral Watermarking**, implementing the Zero-Degradation and Distribution-Preserving watermarking algorithms proposed in the **Agent Mark** paper.
+**AgentMark** is an experimental framework focused on **LLM Agent Behavioral Watermarking**, implementing the Utility Preservation and Distribution-Preserving watermarking algorithms proposed in the **Agent Mark** paper.
 
 This project aims to provide a reproducible, modular, and extensible codebase for evaluating the performance, robustness, and stealthiness of watermarking algorithms in complex agent tasks. The core mechanism decomposes the agent's decision-making process into **Planning Behavior** and **Execution Action**, embedding watermarks via distribution-preserving sampling during the planning phase. This ensures verifiable copyright protection without compromising downstream task utility.
 
@@ -26,7 +26,7 @@ This project aims to provide a reproducible, modular, and extensible codebase fo
 </div>
 
 ### ✨ Key Features:
-- **💎 Zero-Degradation**: Ensures that the watermarked agent behavior distribution is statistically indistinguishable from the original distribution through strict distribution-preserving sampling.
+- **💎 Utility Preservation**: Ensures that the watermarked agent behavior distribution is statistically indistinguishable from the original distribution through strict distribution-preserving sampling.
 - **🛡️ Robustness**: Utilizes Erasure-Resilient Coding and environment-context-bound randomness to effectively handle Missing Logs and Trajectory Truncation.
 - **🌍 Multi-Environment Support**: Covers various scenarios including tool use, embodied agents, and social simulation.
 
