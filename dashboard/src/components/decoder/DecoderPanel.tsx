@@ -14,14 +14,16 @@ interface DecoderPanelProps {
     targetPayload?: string;
     erasureRate: number;
     setErasureRate: (val: number) => void;
+    channelNoiseRef?: React.RefObject<HTMLDivElement>;
 }
 
-const DecoderPanel: React.FC<DecoderPanelProps> = ({
+const DecoderPanel: React.FC<DecoderPanelProps> = ({ 
     visibleSteps,
     erasedIndices,
     targetPayload,
     erasureRate,
-    setErasureRate
+    setErasureRate,
+    channelNoiseRef
 }) => {
     const { locale } = useI18n();
     const bottomRef = useRef<HTMLDivElement>(null);
@@ -67,7 +69,10 @@ const DecoderPanel: React.FC<DecoderPanelProps> = ({
             />
 
             {/* 0. Channel Noise Control */}
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-1">
+            <div 
+                ref={channelNoiseRef}
+                className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-1"
+            >
                 <div className="flex justify-between items-center mb-3">
                     <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${erasureRate > 0 ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`} />

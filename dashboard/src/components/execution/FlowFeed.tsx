@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import StepCard from './StepCard';
 import type { Step } from '../../data/mockData';
 import { useI18n } from '../../i18n/I18nContext';
@@ -13,13 +13,15 @@ interface FlowFeedProps {
     isPlaying?: boolean;
     onTogglePlay?: () => void;
     scenarioId?: string;
+    promptInputRef?: React.RefObject<HTMLInputElement>;
 }
 
-const FlowFeed: React.FC<FlowFeedProps> = ({ visibleSteps, erasedIndices, userQuery, onContinue, isPlaying, onTogglePlay, scenarioId }) => {
+const FlowFeed: React.FC<FlowFeedProps> = ({ visibleSteps, erasedIndices, userQuery, onContinue, isPlaying, onTogglePlay, scenarioId, promptInputRef }) => {
     const bottomRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const isAtBottomRef = useRef(true);
     const { t, locale } = useI18n();
+    const [continueInput, setContinueInput] = useState(''); // 添加输入框状态管理
 
     // Track user scroll position
     const handleScroll = () => {
@@ -146,23 +148,28 @@ const FlowFeed: React.FC<FlowFeedProps> = ({ visibleSteps, erasedIndices, userQu
                             </p>
                             <div className="flex gap-2">
                                 <input
+                                    ref={promptInputRef}
                                     id="continue-input"
                                     type="text"
+                                    value={continueInput}
+                                    onChange={(e) => setContinueInput(e.target.value)}
                                     placeholder={locale === 'zh' ? "输入新指令继续..." : "Input new prompt to continue..."}
                                     className={`flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors
                                         ${(isSending || isPlaying) ? 'opacity-70 bg-slate-100 cursor-not-allowed' : ''}`}
                                     disabled={isSending || isPlaying}
                                     onFocus={() => hasSteps && setShowPrompts(true)}
-                                    // Removed onBlur to allow clicking on the popup
                                     onKeyDown={async (e) => {
                                         if (e.key === 'Enter' && !isSending && !isPlaying) {
-                                            const val = e.currentTarget.value;
-                                            if (val.trim() && onContinue) {
+                                            const val = continueInput.trim();
+                                            if (val && onContinue) {
+                                                setContinueInput(''); // 立即清空
                                                 setIsSending(true);
                                                 setShowPrompts(false);
-                                                await onContinue(val.trim());
-                                                setIsSending(false);
-                                                e.currentTarget.value = "";
+                                                try {
+                                                    await onContinue(val);
+                                                } finally {
+                                                    setIsSending(false);
+                                                }
                                             }
                                         }
                                     }}
@@ -173,14 +180,17 @@ const FlowFeed: React.FC<FlowFeedProps> = ({ visibleSteps, erasedIndices, userQu
                                             ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                                             : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md hover:shadow-lg'}`}
                                     disabled={isSending || isPlaying}
-                                    onClick={async (e) => {
-                                        const input = e.currentTarget.previousElementSibling as HTMLInputElement;
-                                        if (input && input.value.trim() && onContinue) {
+                                    onClick={async () => {
+                                        const val = continueInput.trim();
+                                        if (val && onContinue) {
+                                            setContinueInput(''); // 立即清空
                                             setIsSending(true);
-                                            setShowPrompts(false); // Close prompts on send
-                                            await onContinue(input.value.trim());
-                                            setIsSending(false);
-                                            input.value = "";
+                                            setShowPrompts(false);
+                                            try {
+                                                await onContinue(val);
+                                            } finally {
+                                                setIsSending(false);
+                                            }
                                         }
                                     }}
                                 >

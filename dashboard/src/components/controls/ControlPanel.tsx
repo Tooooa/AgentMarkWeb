@@ -34,6 +34,7 @@ interface ControlPanelProps {
     onEvaluate?: (lang: string) => void;
     isEvaluating?: boolean;
     evaluationResult?: { model_a_score: number, model_b_score: number, reason: string } | null; // New prop
+    modeToggleRef?: React.RefObject<HTMLDivElement>;
 }
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -59,7 +60,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     onNew,
     onEvaluate,
     isEvaluating,
-    evaluationResult // New prop
+    evaluationResult, // New prop
+    modeToggleRef
 }) => {
     const { t, locale, setLocale } = useI18n();
 
@@ -134,7 +136,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 {/* 3. Toggles & Utility Monitor (Expanded) */}
                 <div className="flex-1 min-h-0 flex flex-col gap-4">
                     {/* Toggle (Light Theme) */}
-                    <div className="bg-slate-100 p-1 rounded-lg flex border border-slate-200/60">
+                    <div 
+                        ref={modeToggleRef}
+                        className="bg-slate-100 p-1 rounded-lg flex border border-slate-200/60"
+                    >
                         <button
                             onClick={onToggleComparisonMode}
                             className={`flex-1 py-2 rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${!isComparisonMode

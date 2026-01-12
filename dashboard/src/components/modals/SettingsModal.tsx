@@ -16,6 +16,7 @@ interface SettingsModalProps {
     payload: string;
     setPayload: (payload: string) => void;
     onInitSession?: () => void;
+    hasActiveConversation?: boolean;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -29,10 +30,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     setCustomQuery,
     payload,
     setPayload,
-    onInitSession
+    onInitSession,
+    hasActiveConversation = false
 }) => {
     const { locale } = useI18n();
     const [showScenarioList, setShowScenarioList] = useState(false);
+    const [showPayloadWarning, setShowPayloadWarning] = useState(false);
+    const [showPayloadFormatError, setShowPayloadFormatError] = useState(false);
 
     const handleSelectScenario = (s: typeof scenarios[0]) => {
         const title = locale === 'zh' ? s.title.zh : s.title.en;
@@ -40,8 +44,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setShowScenarioList(false);
     };
 
+    const handlePayloadChange = (newPayload: string) => {
+        // 验证载荷内容只包含0和1
+        const isValidPayload = /^[01]*$/.test(newPayload);
+        
+        if (!isValidPayload && newPayload !== '') {
+            setShowPayloadFormatError(true);
+            return; // 不更新payload
+        } else {
+            setShowPayloadFormatError(false);
+        }
+        
+        if (hasActiveConversation && !showPayloadWarning) {
+            setShowPayloadWarning(true);
+        }
+        setPayload(newPayload);
+    };
+
     const handleApply = () => {
-        if (onInitSession && isLiveMode) {
+        // 只有在实时模式且有自定义查询内容时才初始化会话
+        if (onInitSession && isLiveMode && customQuery.trim()) {
             onInitSession();
         }
         onClose();
@@ -133,10 +155,34 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 <input
                                     type="text"
                                     value={payload}
-                                    onChange={(e) => setPayload(e.target.value)}
+                                    onChange={(e) => handlePayloadChange(e.target.value)}
                                     placeholder="1101"
                                     className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 outline-none transition-all text-sm"
                                 />
+                                {showPayloadFormatError && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -5 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="mt-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
+                                    >
+                                        <span className="text-red-600 text-2xl flex items-center justify-center leading-none">⛔</span>
+                                        <p className="text-base text-red-800 font-semibold leading-relaxed">
+                                            {locale === 'zh' ? '载荷内容只能包含0和1！' : 'Payload can only contain 0 and 1!'}
+                                        </p>
+                                    </motion.div>
+                                )}
+                                {showPayloadWarning && hasActiveConversation && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -5 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="mt-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3"
+                                    >
+                                        <span className="text-amber-600 text-2xl flex items-center justify-center leading-none">⚠️</span>
+                                        <p className="text-base text-amber-800 font-semibold leading-relaxed">
+                                            {locale === 'zh' ? '修改后的载荷内容不会对当前对话生效！' : 'Modified payload will not affect the current conversation!'}
+                                        </p>
+                                    </motion.div>
+                                )}
                             </div>
                         </div>
 

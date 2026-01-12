@@ -9,9 +9,10 @@ type MainLayoutProps = {
     right: React.ReactNode;
     onHome: () => void;
     onSettings?: () => void;
+    settingsButtonRef?: React.RefObject<HTMLButtonElement>;
 };
 
-const MainLayout: React.FC<MainLayoutProps> = ({ left, middle, right, onHome, onSettings }) => {
+const MainLayout: React.FC<MainLayoutProps> = ({ left, middle, right, onHome, onSettings, settingsButtonRef }) => {
     const { locale, setLocale, t } = useI18n();
 
     return (
@@ -28,6 +29,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ left, middle, right, onHome, on
                 <div className="flex items-center gap-3">
                     {onSettings && (
                         <button
+                            ref={settingsButtonRef}
                             onClick={onSettings}
                             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-sm hover:bg-slate-50 transition-colors text-sm font-medium text-slate-600"
                             title={locale === 'en' ? 'Settings' : '设置'}
