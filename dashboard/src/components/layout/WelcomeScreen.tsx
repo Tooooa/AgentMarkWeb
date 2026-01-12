@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Box, Cpu, Plus, Search, Zap } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
 import { api } from '../../services/api';
+import { scenarios as presetScenarios } from '../../data/mockData';
 import type { Trajectory } from '../../data/mockData';
 
 interface WelcomeScreenProps {
@@ -32,17 +33,23 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     const [selectedScenarioId, setSelectedScenarioId] = useState<string>(''); // Start empty
     const [promptText, setPromptText] = useState('');
     const [showScenarioList, setShowScenarioList] = useState(false);
-    const [scenarios, setScenarios] = useState<Trajectory[]>([]);
+    const [historyScenarios, setHistoryScenarios] = useState<Trajectory[]>([]);
 
     const [payload, setPayload] = useState('1101');
     const [erasureRate] = useState(initialErasureRate);
+
+    // Combine preset scenarios with history
+    const allScenarios = useMemo(() => {
+        // Presets first, then history
+        return [...presetScenarios, ...historyScenarios];
+    }, [historyScenarios]);
 
     // Load scenarios from database
     useEffect(() => {
         const loadScenarios = async () => {
             try {
                 const saved = await api.listScenarios();
-                setScenarios(saved);
+                setHistoryScenarios(saved);
             } catch (e) {
                 console.error("Failed to load scenarios", e);
             }
@@ -225,17 +232,51 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                                                                     className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl border border-slate-100 shadow-xl overflow-hidden z-20 text-left"
                                                                 >
                                                                     <div className="max-h-48 overflow-y-auto custom-scrollbar">
-                                                                        {scenarios.map(s => (
-                                                                            <button
-                                                                                key={s.id}
-                                                                                onClick={() => handleSelectScenario(s)}
-                                                                                className="w-full text-left px-4 py-3 hover:bg-indigo-50 flex items-center justify-between group/item"
-                                                                            >
-                                                                                <span className="text-sm font-medium text-slate-700 group-hover/item:text-indigo-700">
-                                                                                    {locale === 'zh' ? s.title.zh : s.title.en}
-                                                                                </span>
-                                                                            </button>
-                                                                        ))}
+                                                                        {/* Preset Scenarios Section */}
+                                                                        {presetScenarios.length > 0 && (
+                                                                            <>
+                                                                                <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider bg-slate-50">
+                                                                                    {locale === 'zh' ? '预设场景' : 'Preset Scenarios'}
+                                                                                </div>
+                                                                                {presetScenarios.map(s => (
+                                                                                    <button
+                                                                                        key={s.id}
+                                                                                        onClick={() => handleSelectScenario(s)}
+                                                                                        className="w-full text-left px-4 py-3 hover:bg-indigo-50 flex items-center justify-between group/item"
+                                                                                    >
+                                                                                        <span className="text-sm font-medium text-slate-700 group-hover/item:text-indigo-700">
+                                                                                            {locale === 'zh' ? s.title.zh : s.title.en}
+                                                                                        </span>
+                                                                                    </button>
+                                                                                ))}
+                                                                            </>
+                                                                        )}
+                                                                        
+                                                                        {/* History Scenarios Section */}
+                                                                        {historyScenarios.length > 0 && (
+                                                                            <>
+                                                                                <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider bg-slate-50 border-t border-slate-100">
+                                                                                    {locale === 'zh' ? '历史记录' : 'History'}
+                                                                                </div>
+                                                                                {historyScenarios.map(s => (
+                                                                                    <button
+                                                                                        key={s.id}
+                                                                                        onClick={() => handleSelectScenario(s)}
+                                                                                        className="w-full text-left px-4 py-3 hover:bg-indigo-50 flex items-center justify-between group/item"
+                                                                                    >
+                                                                                        <span className="text-sm font-medium text-slate-700 group-hover/item:text-indigo-700">
+                                                                                            {locale === 'zh' ? s.title.zh : s.title.en}
+                                                                                        </span>
+                                                                                    </button>
+                                                                                ))}
+                                                                            </>
+                                                                        )}
+                                                                        
+                                                                        {allScenarios.length === 0 && (
+                                                                            <div className="px-4 py-6 text-center text-sm text-slate-400">
+                                                                                {locale === 'zh' ? '暂无场景' : 'No scenarios available'}
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 </motion.div>
                                                             )}
@@ -278,7 +319,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
                                                 <button
                                                     onClick={() => {
-                                                        const scenarioId = selectedScenarioId || (scenarios.length > 0 ? scenarios[0].id : 'custom');
+                                                        const scenarioId = selectedScenarioId || (allScenarios.length > 0 ? allScenarios[0].id : 'custom');
                                                         onStart({
                                                             scenarioId,
                                                             payload,
