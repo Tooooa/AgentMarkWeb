@@ -13,7 +13,7 @@ interface FlowFeedProps {
     isPlaying?: boolean;
     onTogglePlay?: () => void;
     scenarioId?: string;
-    promptInputRef?: React.RefObject<HTMLInputElement>;
+    promptInputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 const FlowFeed: React.FC<FlowFeedProps> = ({ visibleSteps, erasedIndices, userQuery, onContinue, isPlaying, onTogglePlay, scenarioId, promptInputRef }) => {
@@ -158,6 +158,7 @@ const FlowFeed: React.FC<FlowFeedProps> = ({ visibleSteps, erasedIndices, userQu
                                         ${(isSending || isPlaying) ? 'opacity-70 bg-slate-100 cursor-not-allowed' : ''}`}
                                     disabled={isSending || isPlaying}
                                     onFocus={() => hasSteps && setShowPrompts(true)}
+                                    // Removed onBlur to allow clicking on the popup
                                     onKeyDown={async (e) => {
                                         if (e.key === 'Enter' && !isSending && !isPlaying) {
                                             const val = continueInput.trim();
