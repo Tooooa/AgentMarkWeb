@@ -14,15 +14,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI, AsyncOpenAI
 from sentence_transformers import SentenceTransformer, util
 import copy
-from agentmark.core.rlnc_codec import DeterministicRLNC
-from agentmark.core.watermark_sampler import sample_behavior_differential
-
 # --- Configuration ---
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 TOOL_DATA_ROOT = PROJECT_ROOT / "experiments/toolbench/data/data/toolenv/tools"
 
 import sys
 sys.path.append(str(PROJECT_ROOT))
+
+from agentmark.core.rlnc_codec import DeterministicRLNC
+from agentmark.core.watermark_sampler import sample_behavior_differential
 
 # --- Database Setup ---
 from dashboard.server.database import ConversationDB
