@@ -120,11 +120,7 @@ const FlowFeed: React.FC<FlowFeedProps> = ({ visibleSteps, erasedIndices, userQu
                                             <button
                                                 key={idx}
                                                 onClick={() => {
-                                                    const input = document.getElementById('continue-input') as HTMLInputElement;
-                                                    if (input) {
-                                                        input.value = s.userQuery;
-                                                        input.focus();
-                                                    }
+                                                    setContinueInput(s.userQuery);
                                                     setShowPrompts(false);
                                                 }}
                                                 className="w-full text-left px-4 py-3 hover:bg-indigo-50 flex items-center gap-3 group border-b border-slate-50 last:border-0 transition-colors"
@@ -132,9 +128,14 @@ const FlowFeed: React.FC<FlowFeedProps> = ({ visibleSteps, erasedIndices, userQu
                                                 <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-200 transaction-colors">
                                                     <Sparkles size={14} />
                                                 </div>
-                                                <span className="text-sm text-slate-700 group-hover:text-indigo-700 font-medium truncate">
-                                                    {s.userQuery}
-                                                </span>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-xs font-bold text-slate-500 mb-0.5">
+                                                        {locale === 'zh' ? s.title.zh : s.title.en}
+                                                    </p>
+                                                    <p className="text-sm text-slate-700 group-hover:text-indigo-700 font-medium truncate">
+                                                        {s.userQuery}
+                                                    </p>
+                                                </div>
                                             </button>
                                         ))}
                                     </div>

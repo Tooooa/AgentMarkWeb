@@ -352,6 +352,34 @@ export const useSimulation = () => {
                     }
                 });
 
+                // Auto-save after each step completes
+                if (liveScenario && sessionId) {
+                    try {
+                        // Get the updated scenario with the new step
+                        const updatedScenario = {
+                            ...liveScenario,
+                            id: sessionId,
+                            totalSteps: liveScenario.steps.length + 1
+                        };
+                        
+                        // Generate title if needed
+                        let titleToSave = updatedScenario.title;
+                        if ((!titleToSave.en || titleToSave.en === "Live Session" || titleToSave.en === "New Session" || titleToSave.en === "New Chat") && updatedScenario.steps.length > 0) {
+                            // Use first user message as title preview
+                            const firstMessage = updatedScenario.userQuery || updatedScenario.steps[0]?.thought || "";
+                            const titlePreview = firstMessage.length > 30 ? firstMessage.substring(0, 30) + '...' : firstMessage;
+                            titleToSave = { en: titlePreview, zh: titlePreview };
+                        }
+                        
+                        // Save to database (fire and forget, don't block UI)
+                        api.saveScenario(titleToSave, updatedScenario, sessionId).catch(err => {
+                            console.error('[Auto-save] Failed to save scenario:', err);
+                        });
+                    } catch (err) {
+                        console.error('[Auto-save] Error during save:', err);
+                    }
+                }
+
             } catch (e) {
                 console.error(e);
             } finally {
@@ -414,6 +442,37 @@ export const useSimulation = () => {
             if (timerRef.current) clearInterval(timerRef.current);
         };
     }, [isPlaying, activeScenario, isLiveMode, isLoading, handleNext]);
+
+    // Auto-save effect: Save every 10 seconds if there are changes
+    useEffect(() => {
+        if (!isLiveMode || !liveScenario || !sessionId || liveScenario.steps.length === 0) {
+            return;
+        }
+
+        const autoSaveInterval = setInterval(async () => {
+            try {
+                const updatedScenario = {
+                    ...liveScenario,
+                    id: sessionId
+                };
+                
+                // Generate title if needed
+                let titleToSave = updatedScenario.title;
+                if ((!titleToSave.en || titleToSave.en === "Live Session" || titleToSave.en === "New Session" || titleToSave.en === "New Chat") && updatedScenario.steps.length > 0) {
+                    const firstMessage = updatedScenario.userQuery || updatedScenario.steps[0]?.thought || "";
+                    const titlePreview = firstMessage.length > 30 ? firstMessage.substring(0, 30) + '...' : firstMessage;
+                    titleToSave = { en: titlePreview, zh: titlePreview };
+                }
+                
+                await api.saveScenario(titleToSave, updatedScenario, sessionId);
+                console.log('[Auto-save] Saved scenario:', sessionId);
+            } catch (err) {
+                console.error('[Auto-save] Periodic save failed:', err);
+            }
+        }, 10000); // Save every 10 seconds
+
+        return () => clearInterval(autoSaveInterval);
+    }, [isLiveMode, liveScenario, sessionId]);
 
     return {
         scenarios: allScenarios,
@@ -548,6 +607,31 @@ export const useSimulation = () => {
             try {
                 await api.continueSession(currentSessionId!, prompt);
                 setIsPlaying(true);
+                
+                // Auto-save after user input
+                if (liveScenario && currentSessionId) {
+                    try {
+                        const updatedScenario = {
+                            ...liveScenario,
+                            id: currentSessionId
+                        };
+                        
+                        // Generate title if needed
+                        let titleToSave = updatedScenario.title;
+                        if ((!titleToSave.en || titleToSave.en === "Live Session" || titleToSave.en === "New Session" || titleToSave.en === "New Chat") && updatedScenario.steps.length > 0) {
+                            const firstMessage = updatedScenario.userQuery || updatedScenario.steps[0]?.thought || prompt;
+                            const titlePreview = firstMessage.length > 30 ? firstMessage.substring(0, 30) + '...' : firstMessage;
+                            titleToSave = { en: titlePreview, zh: titlePreview };
+                        }
+                        
+                        // Save to database (fire and forget)
+                        api.saveScenario(titleToSave, updatedScenario, currentSessionId).catch(err => {
+                            console.error('[Auto-save] Failed to save after continue:', err);
+                        });
+                    } catch (err) {
+                        console.error('[Auto-save] Error during continue save:', err);
+                    }
+                }
             } catch (e) {
                 console.error(e);
                 alert("Failed to continue session");
