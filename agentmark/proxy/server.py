@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import uuid
 from collections import OrderedDict
 from typing import Optional, List, Dict, Any, Tuple
 
@@ -191,6 +192,19 @@ def _should_two_pass(req: CompletionRequest) -> bool:
     if mode in ("0", "false", "no", "off"):
         return False
     return bool(req.tools)
+
+
+def _build_tool_calls(action: str, action_args: Any) -> List[Dict[str, Any]]:
+    if not action:
+        return []
+    args = action_args if isinstance(action_args, dict) else {}
+    return [
+        {
+            "id": f"call_agentmark_{uuid.uuid4().hex[:8]}",
+            "type": "function",
+            "function": {"name": action, "arguments": json.dumps(args)},
+        }
+    ]
 
 
 def _normalize_candidates(cands: List[str]) -> List[str]:
@@ -393,6 +407,16 @@ def proxy_completion(req: CompletionRequest, request: Request):
 
         # Build response: keep original structure, append watermark info
         resp_dict = final_resp.model_dump()
+        if not two_pass and req.tools:
+            tool_calls = _build_tool_calls(result["action"], result["action_args"])
+            if resp_dict.get("choices"):
+                resp_dict["choices"][0]["message"]["tool_calls"] = tool_calls
+                resp_dict["choices"][0]["finish_reason"] = "tool_calls"
+                resp_dict["choices"][0]["message"]["content"] = None
+            _debug_print(
+                "tool_calls_proxy",
+                {"tool_calls": tool_calls, "arguments_obj": result["action_args"]},
+            )
         resp_dict["watermark"] = {
             "action": result["action"],
             "action_args": result["action_args"],
