@@ -686,6 +686,7 @@ export const useSimulation = () => {
             }
 
             // Inject User Step locally for display (Optimistic UI)
+            // 1221: Add baseline data for alignment in ComparisonView
             setLiveScenario(prev => {
                 if (!prev) return null; // Should not happen if restored above
                 const userStep: Step = {
@@ -694,7 +695,15 @@ export const useSimulation = () => {
                     action: "",
                     distribution: [],
                     watermark: { bits: "", matrixRows: [], rankContribution: 0 },
-                    stepType: 'user_input'
+                    stepType: 'user_input',
+                    // 1221: Ensure user_input has baseline data for alignment
+                    baseline: {
+                        thought: prompt,
+                        action: "",
+                        distribution: [],
+                        toolDetails: "",
+                        stepType: 'user_input'
+                    }
                 };
                 return {
                     ...prev,
