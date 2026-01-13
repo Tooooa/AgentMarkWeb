@@ -44,15 +44,8 @@
   - [2. 启动 Dashboard 可视化界面](#2-启动-dashboard-可视化界面)
   - [3. 数据集配置](#3-数据集配置)
   - [4. 配置环境变量](#4-配置环境变量)
-- [SDK 使用](#-sdk-使用)
-- [实验指南](#实验指南)
-  - [1. ToolBench 实验](#1-toolbench-实验)
-  - [2. ALFWorld 实验](#2-alfworld-实验)
-  - [3. Oasis 社交媒体实验](#3-oasis-社交媒体实验)
-  - [4. RLNC 轨迹鲁棒性实验](#4-rlnc-轨迹鲁棒性实验)
-  - [5. 语义重写鲁棒性实验](#5-语义重写鲁棒性实验)
+- [一次运行流程（插件形态）](#-一次运行流程插件形态)
 - [License](#license)
-
 ---
 
 ## 📂 目录结构
@@ -202,9 +195,9 @@ npm run dev
 alfworld-download
 ```
 `experiments/alfworld/configs/base_config.yaml` 中的配置已预设为指向 `/root/.cache/alfworld`。
-
 > [!NOTE]
 > Oasis (社交媒体) 实验需要独立的运行环境 (Python 3.10+)，请参考下方的 [Oasis 社交媒体实验](#3-oasis-社交媒体实验) 章节。
+
 
 ### 4. 配置环境变量
 
@@ -220,200 +213,60 @@ export $(grep -v '^#' .env | xargs)
 
 ---
 
-## 🔧 SDK 使用
+## ✅ 一次运行流程（插件形态）
 
-AgentMark 提供了封装好的 SDK，便于其他 Agent 开发者快速集成行为水印。
+该流程用于验证：**用户随意输入 → Swarm 生成 tools → 网关做水印采样 → Swarm 执行 tool_calls**。
 
-### 基础示例
-
-```python
-from agentmark.sdk import AgentWatermarker
-
-# 初始化水印器（payload_text 为要嵌入的载荷）
-wm = AgentWatermarker(payload_text="team123", mock=False)
-
-# 在 Agent 决策时进行水印采样
-result = wm.sample(
-    probabilities={"Search": 0.5, "Reply": 0.3, "Finish": 0.2},
-    context="task123||step1",  # 用于生成密钥，需保存到日志
-    history=["last observation"],
-)
-
-print(result.action)              # 选中的动作
-print(result.distribution_diff)   # 前端可视化数据
-
-# 解码验证水印
-bits = wm.decode(
-    probabilities={"Search": 0.5, "Reply": 0.3, "Finish": 0.2},
-    selected_action=result.action,
-    context=result.context_used,
-    round_num=result.round_num,
-)
-print(bits)  # 解码出的比特串
-```
-
-### Prompt 驱动（黑盒 API）集成
-
-当使用外部 LLM API（如 DeepSeek、GPT）时，可通过 Prompt 让模型输出概率分布：
-
-```python
-from agentmark.sdk import AgentWatermarker
-from agentmark.sdk.prompt_adapter import PromptWatermarkWrapper
-
-wm = AgentWatermarker(payload_text="team123")
-wrapper = PromptWatermarkWrapper(wm)
-
-# 1. 获取需要添加到系统提示的指令
-system_prompt = base_system_prompt + "\n" + wrapper.get_instruction()
-
-# 2. 调用 LLM 获取响应（包含 JSON 格式的概率分布）
-llm_response = call_your_llm(system_prompt, user_query)
-
-# 3. 处理响应，自动采样并返回结果
-result = wrapper.process(
-    raw_output=llm_response,
-    fallback_actions=["Search", "Reply", "Finish"],
-    context="task123||step1",
-)
-
-print(result["action"])          # 供执行的动作
-print(result["frontend_data"])   # 供前端展示的数据
-```
-
-### 网关模式（零代码改动）
-
-如果不想修改 Agent 代码，可以部署水印网关：
+### Step 1：启动网关代理（AgentMark Proxy）
 
 ```bash
-# 启动网关
-export DEEPSEEK_API_KEY=sk-your-key
-uvicorn agentmark.proxy.server:app --host 0.0.0.0 --port 8000
+cd /mnt/c/Users/25336/Desktop/AgentMarkWeb
+source ~/miniconda3/etc/profile.d/conda.sh && conda activate AgentMark
+
+export DEEPSEEK_API_KEY=sk-你的key
+export TARGET_LLM_MODEL=deepseek-chat
+export AGENTMARK_DEBUG=1
+export AGENTMARK_TWO_PASS=0   # 走“代理构造 tool_calls”
+
+uvicorn agentmark.proxy.server:app --host 0.0.0.0 --port 8001
 ```
 
-然后将 Agent 的 LLM API 地址指向网关即可：
-```python
-# 原代码
-client = OpenAI(base_url="https://api.deepseek.com/v1")
+### Step 2：启动前端（可视化）
 
-# 改为
-client = OpenAI(base_url="http://localhost:8000/v1")
+```bash
+cd /mnt/c/Users/25336/Desktop/AgentMarkWeb/dashboard
+npm install
+npm run dev
 ```
 
-网关会自动注入水印采样逻辑，并在响应中附加水印信息。
+浏览器访问：`http://localhost:5173`
 
-> **详细文档**: 完整的 API 说明、高级用法、网关配置等请参考 [水印SDK使用说明](项目文档/水印SDK使用说明.md)
+### Step 3：运行 Swarm（外部 Agent）
+
+```bash
+cd /mnt/c/Users/25336/Desktop/AgentMarkWeb/swarm
+pip install -e .
+
+export OPENAI_BASE_URL=http://localhost:8001/v1
+export OPENAI_API_KEY=anything
+
+python -m pytest -q examples/weather_agent/evals.py -k test_calls_weather_when_asked --disable-warnings -s
+```
+
+### Step 4：验证日志
+
+在 **网关代理终端** 可看到：
+
+- `[agentmark:scoring_request]`：评分指令注入
+- `[agentmark:tool_calls_proxy]`：网关构造的工具调用（含参数）
+- `[watermark]`：水印结果与可视化数据
+
+在 **前端** 可查看会话与水印分布可视化。
+
+> 说明：Swarm 的工具候选来自 `agent.functions`，用户输入只是消息内容。网关从 `tools` 抽候选进行水印采样。
 
 ---
-
-## 实验指南
-
-详细的实验运行指南如下：
-
-### 1. ToolBench 实验
-- **简介**: 模拟真实世界 API 调用场景，评估水印对工具使用能力和鲁棒性的影响。
-- **目录**: `experiments/toolbench/`
-- **两种运行模式**:
-  | 模式 | 配置项 (`use_local_model`) | 说明 |
-  |------|---------------------------|------|
-  | **API 模式** | `false` (默认) | 调用远程 LLM API (如 DeepSeek, OpenAI)，水印通过行为采样嵌入 |
-  | **本地模式** | `true` | 加载本地模型 (如 Llama-3)，结合 SynthID 文本水印算法 |
-- **运行流水线**:
-  ```bash
-  conda activate AgentMark
-  # 运行完整流水线 (包含 baseline/watermark/评测)
-  python experiments/toolbench/scripts/run_pipeline.py
-  ```
-- **关键配置**: `experiments/toolbench/configs/pipeline_config.json`
-  - 切换模式: 修改 `common_config.use_local_model` 为 `true` 或 `false`
-  - 本地模式需额外配置 `local_model_path` 指向模型权重路径
-
-### 2. ALFWorld 实验
-- **简介**: 基于文本的交互式家庭环境决策任务，评估水印对 Agent 规划与执行能力的影响。
-- **目录**: `experiments/alfworld/`
-- **环境安装**:
-  ```bash
-  pip install alfworld  # 需在 AgentMark 环境基础上安装
-  ```
-- **运行流水线**:
-  ```bash
-  conda activate AgentMark
-  # 运行完整流水线 (包含 baseline/watermark/评测)
-  python experiments/alfworld/scripts/run_experiment.py --config experiments/alfworld/configs/config.json
-  ```
-- **关键配置**: `experiments/alfworld/configs/config.json`
-
-### 3. Oasis 社交媒体实验
-> [!NOTE]
-> 1. 本目录下的 `oasis/` 是 **修改后的子依赖库** (Modified Submodule)，包含定制化的水印逻辑。
-> 2. 请使用独立的 `oasis` (Python 3.10+) 环境运行。
-
-- **环境安装**:
-  ```bash
-  # 1. 创建环境 (建议 Python 3.10+)
-  conda create -n oasis python=3.10 -y
-  conda activate oasis
-  
-  # 2. 安装 Oasis 包
-  pip install camel-oasis
-  ```
-  详细说明请参考 [Oasis README](experiments/oasis_watermark/oasis/README.md)。
-
-- **简介**: 模拟 Twitter 和 Reddit 上的用户行为与水印注入。
-- **目录**: `experiments/oasis_watermark/`
-- **Twitter 实验**:
-  - 目录: `experiments/oasis_watermark/twitter_watermark_experiment/`
-  - **运行**:
-    ```bash
-    cd experiments/oasis_watermark/twitter_watermark_experiment
-    # 需配置 config.py 或设置环境变量 DEEPSEEK_API_KEY
-    python run_experiment.py
-    # 运行评测
-    python evaluate_metrics_llm.py
-    ```
-- **Reddit 实验**:
-  - 目录: `experiments/oasis_watermark/reddit_watermark_experiment/`
-  - **运行**:
-    ```bash
-    cd experiments/oasis_watermark/reddit_watermark_experiment
-    python run_experiment.py
-    # 运行评测
-    python evaluate_metrics_llm.py
-    ```
-  - **说明**: 模拟 `r/TechFuture` 社区中关于 AI 话题的讨论。
-
-### 4. RLNC 轨迹鲁棒性实验
-- **简介**: 测试基于 RLNC (Random Linear Network Coding) 的水印方案在丢包/擦除场景下的恢复能力。
-- **目录**: `experiments/rlnc_trajectory/`
-- **核心脚本**:
-  | 脚本 | 功能 |
-  |------|------|
-  | `scripts/rlnc_step_erasure_eval.py` | 擦除鲁棒性评测 (模拟不同丢包率) |
-  | `scripts/analyze_fpr.py` | **误报率 (FPR) 分析** - 模拟"未加水印"和"错误密钥"攻击场景 |
-- **运行鲁棒性评测**:
-  ```bash
-  cd experiments/rlnc_trajectory
-  python scripts/rlnc_step_erasure_eval.py --config rlnc_eval_config.json
-  ```
-- **运行 FPR 分析**:
-  ```bash
-  python scripts/analyze_fpr.py --config rlnc_fpr_config.json
-  ```
-- **关键配置**: `rlnc_eval_config.json`, `rlnc_fpr_config.json`
-
-### 5. 语义重写鲁棒性实验
-- **简介**: 测试差分水印在面对语义重写攻击 (Semantic Rewriting Attack) 时的鲁棒性。
-- **目录**: `experiments/semantic_rewriting/`
-- **运行**:
-  ```bash
-  cd experiments/semantic_rewriting
-  python scripts/robustness_test.py \
-      --task data/001_task_0.json \
-      --bits data/decoded_bits.json \
-      --steps 5
-  ```
 
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
-
-
