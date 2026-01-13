@@ -5,6 +5,20 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Refere
 import { X, RotateCcw, ArrowRight, Play } from 'lucide-react';
 import type { Step } from '../../data/mockData';
 import { useI18n } from '../../i18n/I18nContext';
+import { roundNormalizedProbsToSumOne } from '../../utils/probability';
+
+const RANK_COLORS = [
+    '#f87171', // Red
+    '#fbbf24', // Amber
+    '#34d399', // Emerald
+    '#60a5fa', // Blue
+    '#818cf8', // Indigo
+    '#a78bfa', // Violet
+    '#f472b6', // Pink
+];
+
+const MAX_ACTIONS_IN_DETAIL_CHART = 12;
+const MAX_REFERENCE_LINES = 12;
 
 interface StepDetailModalProps {
     isOpen: boolean;
@@ -30,10 +44,31 @@ const StepDetailModal: React.FC<StepDetailModalProps> = ({ isOpen, onClose, step
 
     // --- Data Preparation ---
     const { sortedDist, decompositionData, binsData } = React.useMemo(() => {
-        const sorted = [...step.distribution].sort((a, b) => b.prob - a.prob);
+        const sortedAll = [...step.distribution].sort((a, b) => b.prob - a.prob);
 
-        const bins = sorted.map((d, k) => { // k is 0-indexed here (Rank k+1)
-            const nextProb = sorted[k + 1]?.prob || 0;
+        // Performance: cap chart items and aggregate tail into a single "Other" bucket.
+        let sorted = sortedAll;
+        if (sortedAll.length > MAX_ACTIONS_IN_DETAIL_CHART) {
+            const selected = sortedAll.find((d) => d.isSelected);
+            const keep = sortedAll.slice(0, MAX_ACTIONS_IN_DETAIL_CHART - 1);
+            if (selected && !keep.includes(selected)) {
+                keep[keep.length - 1] = selected;
+            }
+
+            const keptNames = new Set(keep.map((d) => d.name));
+            const otherProb = sortedAll
+                .filter((d) => !keptNames.has(d.name))
+                .reduce((acc, d) => acc + d.prob, 0);
+
+            const other = { name: 'Other', prob: otherProb, isSelected: false };
+            sorted = [...keep, other].sort((a, b) => b.prob - a.prob);
+        }
+
+        const rounded = roundNormalizedProbsToSumOne(sorted.map((d) => d.prob), 3);
+        const sortedRounded = sorted.map((d, i) => ({ ...d, prob: rounded[i] }));
+
+        const bins = sortedRounded.map((d, k) => { // k is 0-indexed here (Rank k+1)
+            const nextProb = sortedRounded[k + 1]?.prob || 0;
             const diff = d.prob - nextProb;
 
             if (diff <= 0.000001) return null; // Skip empty bins
@@ -55,8 +90,8 @@ const StepDetailModal: React.FC<StepDetailModalProps> = ({ isOpen, onClose, step
         }).filter(b => b !== null);
 
         return {
-            sortedDist: sorted,
-            decompositionData: sorted,
+            sortedDist: sortedRounded,
+            decompositionData: sortedRounded,
             binsData: bins
         };
     }, [step]);
@@ -92,16 +127,7 @@ const StepDetailModal: React.FC<StepDetailModalProps> = ({ isOpen, onClose, step
 
     // Colors for Ranks (Stack layers)
     const getRankColor = (rankIndex: number) => {
-        const colors = [
-            '#f87171', // Red
-            '#fbbf24', // Amber
-            '#34d399', // Emerald
-            '#60a5fa', // Blue
-            '#818cf8', // Indigo
-            '#a78bfa', // Violet
-            '#f472b6', // Pink
-        ];
-        return colors[rankIndex % colors.length];
+        return RANK_COLORS[rankIndex % RANK_COLORS.length];
     };
 
     // Calculate flight coordinates
@@ -191,30 +217,49 @@ const StepDetailModal: React.FC<StepDetailModalProps> = ({ isOpen, onClose, step
                     <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50" ref={containerRef}>
                         <div className="flex gap-4 h-[500px]">
                             {/* Left Chart: Decomposition or Single Distribution */}
-                            <div className={`flex-1 bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col ${mode === 'baseline' ? 'max-w-3xl mx-auto w-full' : ''}`} ref={leftChartRef}>
-                                <h3 className="text-sm font-bold text-slate-600 mb-4 uppercase tracking-wider text-center">
-                                    {mode === 'watermarked' ? t('probDecomp') : t('probDist')}
-                                </h3>
-                                <div className="flex-1 relative">
-                                    <ResponsiveContainer width="99%" height="100%">
-                                        <BarChart data={decompositionData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                            <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={60} />
-                                            <YAxis />
-                                            <Tooltip />
-                                            {/* Slicing Lines (Only for Watermarked/Diff) */}
-                                            {mode === 'watermarked' && decompositionData.map((d, i) => (
-                                                <ReferenceLine key={`line-${i}`} y={d.prob} stroke="#94a3b8" strokeDasharray="4 4" label={{ position: 'right', value: `P${i + 1}`, fontSize: 10, fill: '#94a3b8' }} />
-                                            ))}
-                                            <Bar dataKey="prob" radius={[4, 4, 0, 0]}>
-                                                {decompositionData.map((_, i) => (
-                                                    <Cell key={i} fill={getRankColor(i)} />
-                                                ))}
-                                            </Bar>
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
+                              <div className={`flex-1 bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col ${mode === 'baseline' ? 'max-w-3xl mx-auto w-full' : ''}`} ref={leftChartRef}>
+                                  <h3 className="text-sm font-bold text-slate-600 mb-4 uppercase tracking-wider text-center">
+                                      {mode === 'watermarked' ? t('probDecomp') : t('probDist')}
+                                  </h3>
+                                  <div className="flex-1 relative">
+                                      <ResponsiveContainer width="99%" height="100%">
+                                          <BarChart data={decompositionData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+                                              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                              <XAxis
+                                                  dataKey="name"
+                                                  tick={{ fontSize: 10 }}
+                                                  interval={decompositionData.length > 10 ? Math.ceil(decompositionData.length / 10) - 1 : 0}
+                                                  angle={-45}
+                                                  textAnchor="end"
+                                                  height={60}
+                                              />
+                                              <YAxis tickFormatter={(v) => Number(v).toFixed(3)} />
+                                              <Tooltip content={({ active, payload, label }) => {
+                                                  if (active && payload && payload.length) {
+                                                      const item: any = payload[0].payload;
+                                                      const prob = Number(item.prob);
+                                                      return (
+                                                          <div className="bg-white/95 backdrop-blur shadow-xl border border-slate-200 p-3 rounded-lg text-xs">
+                                                              <p className="font-bold mb-1 text-slate-800">{label}</p>
+                                                              <p className="font-mono">Prob: {prob.toFixed(3)}</p>
+                                                          </div>
+                                                      );
+                                                  }
+                                                  return null;
+                                              }} />
+                                              {/* Slicing Lines (Only for Watermarked/Diff) */}
+                                              {mode === 'watermarked' && decompositionData.slice(0, MAX_REFERENCE_LINES).map((d, i) => (
+                                                  <ReferenceLine key={`line-${i}`} y={d.prob} stroke="#94a3b8" strokeDasharray="4 4" label={{ position: 'right', value: `P${i + 1}`, fontSize: 10, fill: '#94a3b8' }} />
+                                              ))}
+                                              <Bar dataKey="prob" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+                                                  {decompositionData.map((_, i) => (
+                                                      <Cell key={i} fill={getRankColor(i)} />
+                                                  ))}
+                                              </Bar>
+                                          </BarChart>
+                                      </ResponsiveContainer>
+                                  </div>
+                              </div>
 
                             {/* Right Section (Only for Watermarked) */}
                             {mode === 'watermarked' && (
@@ -271,17 +316,17 @@ const StepDetailModal: React.FC<StepDetailModalProps> = ({ isOpen, onClose, step
 
                                                     {/* Render Stacked Bars - Animated */}
                                                     {/* We stack up to max K. Max K is sortedDist.length */}
-                                                    {sortedDist.slice(0, visibleLayers).map((_, i) => (
-                                                        <Bar
-                                                            key={`stack-${i}`}
-                                                            dataKey={`Action_${i + 1}`}
-                                                            stackId="a"
-                                                            fill={getRankColor(i)}
-                                                            stroke="white"
-                                                            strokeWidth={1}
-                                                            animationDuration={300} // Smooth entry for each bar
-                                                        />
-                                                    ))}
+                                                      {sortedDist.slice(0, visibleLayers).map((_, i) => (
+                                                          <Bar
+                                                              key={`stack-${i}`}
+                                                              dataKey={`Action_${i + 1}`}
+                                                              stackId="a"
+                                                              fill={getRankColor(i)}
+                                                              stroke="white"
+                                                              strokeWidth={1}
+                                                              isAnimationActive={false}
+                                                          />
+                                                      ))}
 
                                                 </BarChart>
                                             </ResponsiveContainer>
