@@ -41,8 +41,10 @@ This project aims to provide a reproducible, modular, and extensible codebase fo
 - [Directory Structure](#-directory-structure)
 - [Quick Start](#-quick-start)
   - [1. Environment Setup](#1-️-environment-setup)
-  - [2. Dataset Setup](#2-dataset-setup)
-  - [3. Configuration](#3-configuration)
+  - [2. Launch Dashboard Visualization](#2-launch-dashboard-visualization)
+  - [3. Dataset Setup](#3-dataset-setup)
+  - [4. Configuration](#4-configuration)
+- [SDK Usage](#-sdk-usage)
 - [Experiment Guides](#-experiment-guides)
   - [1. ToolBench Experiments](#1-️-toolbench-experiments)
   - [2. ALFWorld Experiments](#2-alfworld-experiments)
@@ -104,7 +106,53 @@ conda activate AgentMark
 pip install -r requirements.txt
 ```
 
-### 2. Dataset Setup
+### 2. Launch Dashboard Visualization
+
+The Dashboard provides an interactive interface for watermark experiments, including real-time comparison and decoding analysis.
+
+#### Requirements
+- **Node.js**: 18.0 or higher (LTS recommended)
+- **NPM**: Usually installed with Node.js
+- **Python**: Backend requires AgentMark environment
+
+#### Steps
+
+**Step 1: Start Backend Service**
+
+Open a terminal and run:
+
+```bash
+# Make sure you're in the project root directory
+conda activate AgentMark
+python dashboard/server/app.py
+```
+
+Success indicator: When you see `Uvicorn running on http://0.0.0.0:8000`, the backend is ready.
+
+> **Note**: Backend service listens on port **8000** by default.
+
+**Step 2: Start Frontend Interface**
+
+Open another terminal and run:
+
+```bash
+cd dashboard
+npm install  # Only needed for first time
+npm run dev
+```
+
+The terminal will display the access URL, typically: `http://localhost:5173`
+
+**Step 3: Access the Application**
+
+Open your browser and visit `http://localhost:5173` or `http://127.0.0.1:5173` to use the AgentMark Dashboard.
+
+#### Troubleshooting
+
+- **Port Already in Use**: If port 8000 or 5173 is occupied, check for other running services or modify the config files (Frontend: `dashboard/vite.config.ts`, Backend: `dashboard/server/app.py`).
+- **Missing Dependencies**: If you see `ModuleNotFoundError` when starting backend, install the missing package with `pip install <package_name>`.
+
+### 3. Dataset Setup
 
 #### ToolBench
 1. Download the ToolBench data (queries, tools, and reference answers) from the [official repository](https://github.com/OpenBMB/ToolBench).
@@ -121,7 +169,7 @@ The configuration in `experiments/alfworld/configs/base_config.yaml` is pre-set 
 > [!NOTE]
 > Oasis (Social Media) experiments require a separate runtime environment (Python 3.10+). Please refer to the [Oasis Social Media Experiments](#3-oasis-social-media-experiments) section below.
 
-### 3. Configuration
+### 4. Configuration
 
 Copy and configure the environment variables:
 
@@ -132,6 +180,93 @@ vim .env
 # IMPORTANT: Use 'export KEY=VALUE' syntax in .env or run:
 export $(grep -v '^#' .env | xargs)
 ```
+
+---
+
+## 🔧 SDK Usage
+
+AgentMark provides an easy-to-use SDK for integrating behavioral watermarking into your Agent applications.
+
+### Basic Example
+
+```python
+from agentmark.sdk import AgentWatermarker
+
+# Initialize watermarker with payload
+wm = AgentWatermarker(payload_text="team123", mock=False)
+
+# Watermark sampling during agent decision-making
+result = wm.sample(
+    probabilities={"Search": 0.5, "Reply": 0.3, "Finish": 0.2},
+    context="task123||step1",  # Used for key generation, save to logs
+    history=["last observation"],
+)
+
+print(result.action)              # Selected action
+print(result.distribution_diff)   # Visualization data for frontend
+
+# Decode and verify watermark
+bits = wm.decode(
+    probabilities={"Search": 0.5, "Reply": 0.3, "Finish": 0.2},
+    selected_action=result.action,
+    context=result.context_used,
+    round_num=result.round_num,
+)
+print(bits)  # Decoded bit string
+```
+
+### Prompt-Driven (Black-box API) Integration
+
+When using external LLM APIs (e.g., DeepSeek, GPT), use prompts to obtain probability distributions:
+
+```python
+from agentmark.sdk import AgentWatermarker
+from agentmark.sdk.prompt_adapter import PromptWatermarkWrapper
+
+wm = AgentWatermarker(payload_text="team123")
+wrapper = PromptWatermarkWrapper(wm)
+
+# 1. Get instruction to add to system prompt
+system_prompt = base_system_prompt + "\n" + wrapper.get_instruction()
+
+# 2. Call LLM to get response (with JSON-formatted probability distribution)
+llm_response = call_your_llm(system_prompt, user_query)
+
+# 3. Process response, auto-sample and return result
+result = wrapper.process(
+    raw_output=llm_response,
+    fallback_actions=["Search", "Reply", "Finish"],
+    context="task123||step1",
+)
+
+print(result["action"])          # Action to execute
+print(result["frontend_data"])   # Data for frontend display
+```
+
+### Gateway Mode (Zero Code Changes)
+
+Deploy a watermarking gateway to avoid modifying your Agent code:
+
+```bash
+# Start gateway
+export DEEPSEEK_API_KEY=sk-your-key
+uvicorn agentmark.proxy.server:app --host 0.0.0.0 --port 8000
+```
+
+Then point your Agent's LLM API to the gateway:
+```python
+# Original code
+client = OpenAI(base_url="https://api.deepseek.com/v1")
+
+# Change to
+client = OpenAI(base_url="http://localhost:8000/v1")
+```
+
+The gateway automatically injects watermark sampling logic and attaches watermark information to responses.
+
+> **Detailed Documentation**: For complete API reference, advanced usage, and gateway configuration, see [Watermark SDK Guide](项目文档/水印SDK使用说明.md)
+
+---
 
 ## 🧪 Experiment Guides
 

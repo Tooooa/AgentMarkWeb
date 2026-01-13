@@ -41,8 +41,10 @@
 - [目录结构](#-目录结构)
 - [快速开始](#-快速开始)
   - [1. 环境配置](#1-️-环境配置-agentmark)
-  - [2. 数据集配置](#2-数据集配置)
-  - [3. 配置环境变量](#3-配置环境变量)
+  - [2. 启动 Dashboard 可视化界面](#2-启动-dashboard-可视化界面)
+  - [3. 数据集配置](#3-数据集配置)
+  - [4. 配置环境变量](#4-配置环境变量)
+- [SDK 使用](#-sdk-使用)
 - [实验指南](#实验指南)
   - [1. ToolBench 实验](#1-toolbench-实验)
   - [2. ALFWorld 实验](#2-alfworld-实验)
@@ -106,19 +108,53 @@ conda activate AgentMark
 pip install -r requirements.txt
 ```
 
-**适用于 Dashboard 前端界面**
+### 2. 启动 Dashboard 可视化界面
 
-- **Node.js**: 18.0+
-- **NPM**: 随 Node.js 安装
+Dashboard 提供了交互式的水印实验界面，包含实时对比、解码分析等功能。
+
+#### 环境要求
+- **Node.js**: 18.0 或更高版本（推荐使用 LTS）
+- **NPM**: 通常随 Node.js 一起安装
+- **Python**: 后端需要 AgentMark 环境
+
+#### 启动步骤
+
+**步骤 1: 启动后端服务**
+
+打开一个终端窗口，运行：
 
 ```bash
-# Dashboard 前端启动
+# 确保在项目根目录
+conda activate AgentMark
+python dashboard/server/app.py
+```
+
+成功提示：当您看到 `Uvicorn running on http://0.0.0.0:8000` 时，说明后端已成功启动。
+
+> **注意**: 后端服务默认监听 **8000** 端口。
+
+**步骤 2: 启动前端界面**
+
+打开另一个终端窗口，运行：
+
+```bash
 cd dashboard
-npm install
+npm install  # 仅首次需要
 npm run dev
 ```
 
-### 2. 数据集配置
+终端会显示访问地址，通常为：`http://localhost:5173`
+
+**步骤 3: 访问应用**
+
+打开浏览器，访问 `http://localhost:5173` 或 `http://127.0.0.1:5173` 即可使用 AgentMark Dashboard。
+
+#### 常见问题
+
+- **端口被占用**: 如果 8000 或 5173 端口被占用，请检查是否有其他服务正在运行，或修改配置文件（前端: `dashboard/vite.config.ts`，后端: `dashboard/server/app.py`）。
+- **依赖缺失**: 如果启动后端时报错 `ModuleNotFoundError`，请使用 `pip install <缺少包名>` 安装。
+
+### 3. 数据集配置
 
 #### ToolBench
 1. 从 [官方仓库](https://github.com/OpenBMB/ToolBench) 下载 ToolBench 数据（包含 queries, tools 和 reference answers）。
@@ -135,7 +171,7 @@ alfworld-download
 > [!NOTE]
 > Oasis (社交媒体) 实验需要独立的运行环境 (Python 3.10+)，请参考下方的 [Oasis 社交媒体实验](#3-oasis-社交媒体实验) 章节。
 
-### 3. 配置环境变量
+### 4. 配置环境变量
 
 复制并修改环境变量模板：
 
@@ -146,6 +182,93 @@ vim .env
 # 注意：请在 .env 中使用 'export KEY=VALUE' 语法，或运行以下命令使其生效：
 export $(grep -v '^#' .env | xargs)
 ```
+
+---
+
+## 🔧 SDK 使用
+
+AgentMark 提供了封装好的 SDK，便于其他 Agent 开发者快速集成行为水印。
+
+### 基础示例
+
+```python
+from agentmark.sdk import AgentWatermarker
+
+# 初始化水印器（payload_text 为要嵌入的载荷）
+wm = AgentWatermarker(payload_text="team123", mock=False)
+
+# 在 Agent 决策时进行水印采样
+result = wm.sample(
+    probabilities={"Search": 0.5, "Reply": 0.3, "Finish": 0.2},
+    context="task123||step1",  # 用于生成密钥，需保存到日志
+    history=["last observation"],
+)
+
+print(result.action)              # 选中的动作
+print(result.distribution_diff)   # 前端可视化数据
+
+# 解码验证水印
+bits = wm.decode(
+    probabilities={"Search": 0.5, "Reply": 0.3, "Finish": 0.2},
+    selected_action=result.action,
+    context=result.context_used,
+    round_num=result.round_num,
+)
+print(bits)  # 解码出的比特串
+```
+
+### Prompt 驱动（黑盒 API）集成
+
+当使用外部 LLM API（如 DeepSeek、GPT）时，可通过 Prompt 让模型输出概率分布：
+
+```python
+from agentmark.sdk import AgentWatermarker
+from agentmark.sdk.prompt_adapter import PromptWatermarkWrapper
+
+wm = AgentWatermarker(payload_text="team123")
+wrapper = PromptWatermarkWrapper(wm)
+
+# 1. 获取需要添加到系统提示的指令
+system_prompt = base_system_prompt + "\n" + wrapper.get_instruction()
+
+# 2. 调用 LLM 获取响应（包含 JSON 格式的概率分布）
+llm_response = call_your_llm(system_prompt, user_query)
+
+# 3. 处理响应，自动采样并返回结果
+result = wrapper.process(
+    raw_output=llm_response,
+    fallback_actions=["Search", "Reply", "Finish"],
+    context="task123||step1",
+)
+
+print(result["action"])          # 供执行的动作
+print(result["frontend_data"])   # 供前端展示的数据
+```
+
+### 网关模式（零代码改动）
+
+如果不想修改 Agent 代码，可以部署水印网关：
+
+```bash
+# 启动网关
+export DEEPSEEK_API_KEY=sk-your-key
+uvicorn agentmark.proxy.server:app --host 0.0.0.0 --port 8000
+```
+
+然后将 Agent 的 LLM API 地址指向网关即可：
+```python
+# 原代码
+client = OpenAI(base_url="https://api.deepseek.com/v1")
+
+# 改为
+client = OpenAI(base_url="http://localhost:8000/v1")
+```
+
+网关会自动注入水印采样逻辑，并在响应中附加水印信息。
+
+> **详细文档**: 完整的 API 说明、高级用法、网关配置等请参考 [水印SDK使用说明](项目文档/水印SDK使用说明.md)
+
+---
 
 ## 实验指南
 
