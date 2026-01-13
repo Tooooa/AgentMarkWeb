@@ -1,6 +1,6 @@
 <div align="center">
-  
-  # AgentMark
+  <img src="assets/logo.svg" width="120" alt="AgentMark Logo" style="display:inline-block; vertical-align:middle; margin-right:20px"/>
+  <img src="assets/logo-text.svg" height="80" alt="AgentMark" style="display:inline-block; vertical-align:middle"/>
 
   **LLM Agent 行为水印实验框架**
 
@@ -157,9 +157,44 @@ npm run dev
 ### 3. 数据集配置
 
 #### ToolBench
-1. 从 [官方仓库](https://github.com/OpenBMB/ToolBench) 下载 ToolBench 数据（包含 queries, tools 和 reference answers）。
-2. 将解压后的 `data` 文件夹放入 `experiments/toolbench/data/` 目录下。
-   - 预期路径结构：`experiments/toolbench/data/data/toolenv/tools` 等。
+
+> [!IMPORTANT]
+> **ToolBench 数据集是必需的！** 运行 ToolBench 实验前必须完成以下步骤，否则会因缺少工具定义和测试查询而无法运行。
+
+**下载步骤：**
+
+1. **下载 ToolBench 数据集**
+   
+   从 [ToolBench 官方仓库](https://github.com/OpenBMB/ToolBench) 下载完整数据集，包含：
+   - `queries`: 测试查询任务
+   - `tools`: 工具 API 定义 (约 16,000+ 个工具)
+   - `reference answers`: 参考答案 (用于评测)
+
+   ```bash
+   # 推荐使用 Git LFS 或从 Release 页面直接下载
+   # 数据集大小约 2-3 GB
+   ```
+
+2. **放置到正确目录**
+   
+   将解压后的 `data` 文件夹放入 `experiments/toolbench/data/` 目录下：
+   
+   ```bash
+   # 预期的目录结构
+   AgentMark/
+   └── experiments/
+       └── toolbench/
+           └── data/
+               └── data/           # 解压后的数据文件夹
+                   ├── test_query/
+                   ├── toolenv/
+                   │   └── tools/  # 包含所有工具 JSON 定义
+                   └── answer/
+   ```
+
+3. **验证数据集**
+   
+   确认 `experiments/toolbench/data/data/toolenv/tools` 目录下包含多个分类子目录（如 `Search/`, `Social_Media/` 等），每个分类下有工具的 JSON 文件。
 
 #### ALFWorld
 数据集在运行时会自动下载到 `~/.cache/alfworld`，或者您可以手动运行：
@@ -187,75 +222,133 @@ export $(grep -v '^#' .env | xargs)
 
 ## 🔧 SDK 使用
 
-AgentMark 提供了封装好的 SDK，便于其他 Agent 开发者快速集成行为水印。
+AgentMark 提供了封装好的 SDK，便于其他 Agent 开发者快速集成行为水印，并为前端可视化提供结构化日志。
 
-### 基础示例
+### 1. 主要接口
 
 ```python
 from agentmark.sdk import AgentWatermarker
 
-# 初始化水印器（payload_text 为要嵌入的载荷）
 wm = AgentWatermarker(payload_text="team123", mock=False)
 
-# 在 Agent 决策时进行水印采样
+# 采样（嵌入水印）
 result = wm.sample(
     probabilities={"Search": 0.5, "Reply": 0.3, "Finish": 0.2},
-    context="task123||step1",  # 用于生成密钥，需保存到日志
-    history=["last observation"],
+    context="task123||step1",          # 建议接入方自定义，需在日志里保存
+    history=["last observation"],      # 备用：若 context 为空，使用 history 生成 key
 )
+print(result.action)                   # 选中的动作
+print(result.distribution_diff)        # 给前端画概率对比的结构化数据
 
-print(result.action)              # 选中的动作
-print(result.distribution_diff)   # 前端可视化数据
-
-# 解码验证水印
+# 解码（验证水印）
 bits = wm.decode(
     probabilities={"Search": 0.5, "Reply": 0.3, "Finish": 0.2},
     selected_action=result.action,
     context=result.context_used,
     round_num=result.round_num,
 )
-print(bits)  # 解码出的比特串
+print(bits)
 ```
 
-### Prompt 驱动（黑盒 API）集成
+**返回对象 `WatermarkSampleResult`**：
+- `action`: 本步被选中的动作
+- `bits_embedded`: 本步嵌入的比特数
+- `bit_index`: 当前累积指针（下次采样从这里继续）
+- `payload_length`: 整个水印比特串长度
+- `context_used`: 生成密钥的上下文（需在日志中保存，解码用）
+- `round_num`: 使用的轮次编号（默认内部自增，亦可外部传入）
+- `target_behaviors`: 编码期的"目标集合"（检测用）
+- `distribution_diff`: 给前端的可视化数据（原始概率/水印后分布/目标标记）
+- `is_mock`: 是否为 mock 模式（前端联调用）
 
-当使用外部 LLM API（如 DeepSeek、GPT）时，可通过 Prompt 让模型输出概率分布：
+### 2. 必备输入契约
 
+- **候选动作 + 概率**：必须提供一个 `Dict[str, float]`，算法会归一化。若接入方只能拿到最终动作文本而没有候选概率，则无法使用此行为水印方案。
+- **context_for_key**：建议格式如 `task_id||step_id||obs_hash`，务必随日志存储，用于解码和验水印。
+- **轮次 round_num**：默认内部自增；若接入方已有自己的 step 序号，可通过 `round_num` 传入保持同步。
+
+### 3. Mock 模式（前端联调）
+
+初始化传入 `mock=True` 即可：`AgentWatermarker(..., mock=True)`。此模式返回伪造的 `distribution_diff`，方便前端先联调 UI，记得在展示层标注为 mock。
+
+### 4. 日志建议字段
+
+- `step_id` / `round_num`
+- `context`（与编码一致）
+- `probabilities`（行为名及概率）
+- `selected_action`
+- `target_behaviors`
+- `bits_embedded` / `bit_index`
+- `distribution_diff`（可选，前端展示用）
+
+### 5. Prompt 驱动（黑盒 API）集成
+
+当外部 LLM 只能通过 Prompt 返回自报概率时，可以使用 `agentmark.sdk.prompt_adapter` 辅助函数。
+
+**Prompt 模板示例**：
+```
+你必须返回 JSON：
+{
+  "action_weights": {"Action1": 0.8, "Action2": 0.15, "Action3": 0.05},
+  "action_args": {"Action1": {...}, "Action2": {...}, "Action3": {...}},
+  "thought": "简要原因"
+}
+要求 action_weights 覆盖候选，值可不精确归一化，我们会归一化；不得输出 JSON 以外的文本。
+```
+
+**解析与采样代码**：
 ```python
 from agentmark.sdk import AgentWatermarker
-from agentmark.sdk.prompt_adapter import PromptWatermarkWrapper
-
-wm = AgentWatermarker(payload_text="team123")
-wrapper = PromptWatermarkWrapper(wm)
-
-# 1. 获取需要添加到系统提示的指令
-system_prompt = base_system_prompt + "\n" + wrapper.get_instruction()
-
-# 2. 调用 LLM 获取响应（包含 JSON 格式的概率分布）
-llm_response = call_your_llm(system_prompt, user_query)
-
-# 3. 处理响应，自动采样并返回结果
-result = wrapper.process(
-    raw_output=llm_response,
-    fallback_actions=["Search", "Reply", "Finish"],
-    context="task123||step1",
+from agentmark.sdk.prompt_adapter import (
+    choose_action_from_prompt_output,
+    PromptWatermarkWrapper,
 )
 
-print(result["action"])          # 供执行的动作
-print(result["frontend_data"])   # 供前端展示的数据
+wm = AgentWatermarker(payload_text="team123")
+
+# 方式1: 直接解析
+selected, probs_used = choose_action_from_prompt_output(
+    wm,
+    raw_output=llm_response_text,
+    fallback_actions=["Search", "Reply", "Finish"],
+    context="task123||step1",
+    history=["last observation"],
+)
+
+# 方式2: 使用包装器
+wrapper = PromptWatermarkWrapper(wm)
+system_prompt = base_system_prompt + "\n" + wrapper.get_instruction()
+result = wrapper.process(
+    raw_output=llm_response_text,
+    fallback_actions=["Search", "Reply", "Finish"],
+    context="task123||step1",
+    history=["last observation"],
+)
+# result["action"] 供执行；result["frontend_data"] 直接给前端/日志
 ```
 
-### 网关模式（零代码改动）
+> **注意**：自报概率的可信度低于真实 logits，统计显著性可能受影响；解析失败时会回退为均分分布。
 
-如果不想修改 Agent 代码，可以部署水印网关：
+### 6. 网关模式（零代码改动）
 
+如果不想修改 Agent 代码，可以部署水印网关。
+
+**启动网关**：
 ```bash
-# 启动网关
 export DEEPSEEK_API_KEY=sk-your-key
 uvicorn agentmark.proxy.server:app --host 0.0.0.0 --port 8000
 ```
 
-然后将 Agent 的 LLM API 地址指向网关即可：
+**可选环境变量**（推荐配置 `AGENTMARK_TWO_PASS`）：
+```bash
+export AGENTMARK_TWO_PASS=1                 # tools 场景下启用两阶段
+export AGENTMARK_PAYLOAD_BITS=1101          # 固定水印 payload
+export AGENTMARK_SESSION_DEFAULT=demo       # 默认会话 key
+export AGENTMARK_PROB_TEMPERATURE=2.0       # 概率温度(>1 更平坦)
+export AGENTMARK_FORCE_UNIFORM=1            # 强制均匀分布（演示用）
+```
+
+**Agent 端调用**（无需修改代码）：
 ```python
 # 原代码
 client = OpenAI(base_url="https://api.deepseek.com/v1")
@@ -264,9 +357,111 @@ client = OpenAI(base_url="https://api.deepseek.com/v1")
 client = OpenAI(base_url="http://localhost:8000/v1")
 ```
 
-网关会自动注入水印采样逻辑，并在响应中附加水印信息。
+或设置环境变量：
+```bash
+export OPENAI_BASE_URL=http://localhost:8000/v1
+export OPENAI_API_KEY=anything
+```
 
-> **详细文档**: 完整的 API 说明、高级用法、网关配置等请参考 [水印SDK使用说明](项目文档/水印SDK使用说明.md)
+**网关响应格式**：
+```json
+{
+  "watermark": {
+    "mode": "tools|system|extra_body|bootstrap",
+    "candidates_used": ["候选1","候选2"],
+    "probabilities_used": {"候选1":0.4, "候选2":0.6},
+    "action": "候选2",
+    "frontend_data": {...},
+    "decoded_bits": "11",
+    "context_used": "proxy||step1",
+    "round_num": 0,
+    "raw_llm_output": "原始 LLM 文本"
+  }
+}
+```
+
+**候选提取优先级**：
+1. `tools/functions`（推荐，从工具定义自动提取）
+2. `system` message 中的 agentmark 元数据
+3. `extra_body.agentmark.candidates` / 顶层 `candidates`
+4. 无候选则 bootstrap（显式标记，可靠性较低）
+
+**自定义字段示例**：
+```python
+resp = client.chat.completions.create(
+    model="deepseek-chat",
+    messages=[...],
+    extra_body={
+        "candidates": ["候选1","候选2"],
+        "context": "task||step1",
+        "agentmark": {
+            "session_id": "your-session-id"  # 跨请求累积
+        }
+    }
+)
+print(resp.watermark)  # 包含水印信息
+```
+
+### 7. 真实 LLM 测试示例
+
+**DeepSeek 集成测试**：
+```bash
+# 1. 激活环境
+conda activate AgentMark
+export DEEPSEEK_API_KEY=sk-your-key
+
+# 2. 启动网关
+uvicorn agentmark.proxy.server:app --host 0.0.0.0 --port 8000
+
+# 3. 运行测试脚本
+PYTHONPATH=. python3 tests/fake_agent_llm.py \
+  --payload 1101 \
+  --rounds 1 \
+  --task "今天晚上吃什么？"
+```
+
+输出包含：
+- `[raw LLM output]`: 模型原始 JSON 响应
+- `frontend distribution diff`: 原始 vs 水印重组的分布
+- `decoded bits`: 应匹配 payload 前缀
+
+**前端柱状图验证流程**：
+```bash
+# 1. 启动 Dashboard 后端（端口 8000）
+python dashboard/server/app.py
+
+# 2. 启动网关（端口 8001）
+export AGENTMARK_TWO_PASS=1
+uvicorn agentmark.proxy.server:app --host 0.0.0.0 --port 8001
+
+# 3. 生成前端场景
+python tests/frontend_bar_demo.py \
+  --proxy-base http://localhost:8001/v1 \
+  --dashboard-base http://localhost:8000 \
+  --rounds 5
+
+# 4. 启动前端查看
+cd dashboard && npm run dev
+# 浏览器打开 http://localhost:5173
+```
+
+### 8. 打包与安装（pip 形态）
+
+```bash
+# 打包
+pip install build
+python -m build
+
+# 安装
+pip install dist/agentmark_sdk-0.1.0-py3-none-any.whl
+
+# 使用
+from agentmark.sdk import AgentWatermarker, PromptWatermarkWrapper
+```
+
+### 9. 依赖说明
+
+封装内部复用了 `agentmark/core/watermark_sampler.py`，仍依赖 `torch`。若接入方环境较轻量，可在后续迭代提供纯 Python 版本或 HTTP 服务封装
 
 ---
 
