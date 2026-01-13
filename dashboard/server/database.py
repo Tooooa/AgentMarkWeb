@@ -29,10 +29,17 @@ class ConversationDB:
                 steps_json TEXT,
                 payload TEXT,
                 evaluation_json TEXT,
+                is_pinned INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
+        # Add is_pinned column if it doesn't exist (for existing databases)
+        try:
+            cursor.execute("ALTER TABLE conversations ADD COLUMN is_pinned INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
         
         # Create index for faster queries
         cursor.execute("""
@@ -103,7 +110,7 @@ class ConversationDB:
         return self._row_to_dict(row)
     
     def list_conversations(self, limit: int = 100, search: str = None) -> List[Dict]:
-        """List all conversations, newest first, with optional search"""
+        """List all conversations, pinned first, then newest first, with optional search"""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -114,13 +121,13 @@ class ConversationDB:
             cursor.execute("""
                 SELECT * FROM conversations 
                 WHERE title_en LIKE ? OR title_zh LIKE ? OR user_query LIKE ?
-                ORDER BY created_at DESC 
+                ORDER BY is_pinned DESC, created_at DESC 
                 LIMIT ?
             """, (search_pattern, search_pattern, search_pattern, limit))
         else:
             cursor.execute("""
                 SELECT * FROM conversations 
-                ORDER BY created_at DESC 
+                ORDER BY is_pinned DESC, created_at DESC 
                 LIMIT ?
             """, (limit,))
         
@@ -142,6 +149,48 @@ class ConversationDB:
         
         return deleted
     
+    def clear_all_conversations(self) -> int:
+        """Clear all conversation history"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT COUNT(*) FROM conversations")
+        count = cursor.fetchone()[0]
+        
+        cursor.execute("DELETE FROM conversations")
+        
+        conn.commit()
+        conn.close()
+        
+        return count
+    
+    def toggle_pin(self, conversation_id: str) -> bool:
+        """Toggle pin status of a conversation"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Get current pin status
+        cursor.execute("SELECT is_pinned FROM conversations WHERE id = ?", (conversation_id,))
+        row = cursor.fetchone()
+        
+        if row is None:
+            conn.close()
+            return False
+        
+        current_status = row[0]
+        new_status = 0 if current_status else 1
+        
+        # Update pin status
+        cursor.execute(
+            "UPDATE conversations SET is_pinned = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (new_status, conversation_id)
+        )
+        
+        conn.commit()
+        conn.close()
+        
+        return True
+    
     def _row_to_dict(self, row: sqlite3.Row) -> Dict:
         """Convert database row to conversation dict"""
         steps = json.loads(row["steps_json"]) if row["steps_json"] else []
@@ -159,6 +208,7 @@ class ConversationDB:
             "steps": steps,
             "payload": row["payload"],
             "evaluation": evaluation,
+            "isPinned": bool(row["is_pinned"]) if "is_pinned" in row.keys() else False,
             "createdAt": row["created_at"],
             "updatedAt": row["updated_at"]
         }

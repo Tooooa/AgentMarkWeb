@@ -991,6 +991,52 @@ export const useSimulation = () => {
                 console.error("Delete failed", e);
                 alert("删除失败，请重试");
             }
+        },
+
+        clearAllHistory: async () => {
+            try {
+                console.log("[DEBUG] Starting clearAllHistory...");
+                const result = await api.clearAllHistory();
+                console.log("[DEBUG] API response:", result);
+                
+                // Create a new empty scenario
+                const newChatId = `new_${Date.now()}`;
+                const newEmptyScenario: Trajectory = {
+                    id: newChatId,
+                    title: { en: "New Chat", zh: "新对话" },
+                    taskName: "New Chat",
+                    userQuery: "",
+                    totalSteps: 0,
+                    steps: []
+                };
+                setLiveScenario(newEmptyScenario);
+                setActiveScenarioId(newChatId);
+                setIsLiveMode(true);
+                setSessionId(null);
+                
+                // Refresh scenarios list
+                console.log("[DEBUG] Refreshing scenarios...");
+                await refreshScenarios();
+                console.log("[DEBUG] clearAllHistory completed successfully");
+                
+                // Show success message
+                alert("历史记录已清空");
+            } catch (e: any) {
+                console.error("Clear all failed", e);
+                const errorMsg = e.response?.data?.detail || e.message || "未知错误";
+                alert(`清空失败: ${errorMsg}`);
+                throw e; // Re-throw to let caller know it failed
+            }
+        },
+
+        togglePin: async (scenarioId: string) => {
+            try {
+                await api.togglePin(scenarioId);
+                await refreshScenarios();
+            } catch (e) {
+                console.error("Toggle pin failed", e);
+                alert("收藏操作失败，请重试");
+            }
         }
     };
 };

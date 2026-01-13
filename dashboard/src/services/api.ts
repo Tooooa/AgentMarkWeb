@@ -116,5 +116,15 @@ export const api = {
     deleteScenario: async (scenarioId: string) => {
         const response = await axios.delete(`${API_BASE}/api/scenarios/${scenarioId}`);
         return response.data;
+    },
+
+    clearAllHistory: async () => {
+        const response = await axios.delete(`${API_BASE}/api/scenarios/clear_all`);
+        return response.data;
+    },
+
+    togglePin: async (scenarioId: string) => {
+        const response = await axios.post(`${API_BASE}/api/scenarios/${scenarioId}/toggle_pin`);
+        return response.data;
     }
 };

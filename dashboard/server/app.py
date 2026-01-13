@@ -373,6 +373,33 @@ async def save_scenario(req: SaveScenarioRequest):
         print(f"[ERROR] Save failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.delete("/api/scenarios/clear_all")
+async def clear_all_history():
+    """Clear all conversation history from database"""
+    try:
+        deleted_count = db.clear_all_conversations()
+        print(f"[INFO] Cleared all history: {deleted_count} conversations deleted")
+        return {"status": "success", "deleted_count": deleted_count}
+    except Exception as e:
+        print(f"[ERROR] Clear all failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/scenarios/{scenario_id}/toggle_pin")
+async def toggle_pin_scenario(scenario_id: str):
+    """Toggle pin status of a conversation"""
+    try:
+        success = db.toggle_pin(scenario_id)
+        if success:
+            print(f"[INFO] Toggled pin status for scenario {scenario_id}")
+            return {"status": "success", "id": scenario_id}
+        else:
+            raise HTTPException(status_code=404, detail="Scenario not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Toggle pin failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.delete("/api/scenarios/{scenario_id}")
 async def delete_scenario(scenario_id: str):
     """Delete a conversation from database"""
@@ -387,6 +414,7 @@ async def delete_scenario(scenario_id: str):
         raise
     except Exception as e:
         print(f"[ERROR] Delete failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 class GenerateTitleRequest(BaseModel):
