@@ -212,7 +212,7 @@ export $(grep -v '^#' .env | xargs)
 
 ---
 
-## ✅ One-run Flow (Plugin Mode)
+## ✅ Plugin Mode
 
 This flow validates: **free-form user input → Swarm produces tools → proxy runs watermark sampling → Swarm executes tool_calls**.
 

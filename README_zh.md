@@ -213,9 +213,9 @@ export $(grep -v '^#' .env | xargs)
 
 ---
 
-## ✅ 一次运行流程（插件形态）
+## ✅ 使用我们的插件
 
-该流程用于验证：**用户随意输入 → Swarm 生成 tools → 网关做水印采样 → Swarm 执行 tool_calls**。
+该流程用于验证：**用户输入请求 → Swarm 生成 tools → 网关做水印采样 → Swarm 执行 tool_calls**。
 
 ### Step 1：启动网关代理（AgentMark Proxy）
 
@@ -241,7 +241,7 @@ npm run dev
 
 浏览器访问：`http://localhost:5173`
 
-### Step 3：运行 Swarm（外部 Agent）
+### Step 3：运行 openai/swarm 一次示例（外部 Agent）
 
 ```bash
 cd /mnt/c/Users/25336/Desktop/AgentMarkWeb/swarm
