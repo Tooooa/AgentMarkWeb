@@ -67,7 +67,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     modeToggleRef,
     onRefreshHistory,
     onDeleteScenario,
-    setIsHistoryViewOpen
+    setIsHistoryViewOpen,
 }) => {
     const { t, locale, setLocale } = useI18n();
 

@@ -117,10 +117,8 @@ function AppContent() {
   };
 
   const handleNewConversation = useCallback(async () => {
-    // 1. Auto-Save & Reset via Hook
+    // 直接创建新会话，由hook内部判断是否需要保存当前会话
     await startNewConversation();
-    // 2. Stay on Dashboard (do not reset hasStarted)
-    // setHasStarted(false); // REMOVED
   }, [startNewConversation]);
 
   // 处理新手引导下一步

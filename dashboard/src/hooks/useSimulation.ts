@@ -672,16 +672,27 @@ export const useSimulation = () => {
                         steps: []
                     };
                     
-                    // If there's an existing "New Chat" entry, update it with the new session ID
+                    // If there's an existing "New Chat" entry (not saved to DB yet), just replace it
+                    // No need to delete from DB since empty chats are not saved
                     if (liveScenario && (liveScenario.title.en === "New Chat" || liveScenario.title.zh === "新对话")) {
                         try {
-                            // Delete the old "New Chat" entry
-                            await api.deleteScenario(liveScenario.id);
-                            // Save with the new session ID
+                            // Only try to delete if it was actually saved to DB (has sessionId format)
+                            if (liveScenario.id.startsWith('sess_')) {
+                                await api.deleteScenario(liveScenario.id);
+                            }
+                            // Save the new session with actual content
                             await api.saveScenario(updatedScenario.title, updatedScenario, newSessionId);
                             await refreshScenarios();
                         } catch (e) {
                             console.error("Failed to update scenario", e);
+                        }
+                    } else {
+                        // First message in a brand new chat - save it
+                        try {
+                            await api.saveScenario(updatedScenario.title, updatedScenario, newSessionId);
+                            await refreshScenarios();
+                        } catch (e) {
+                            console.error("Failed to save new conversation", e);
                         }
                     }
                     
@@ -841,18 +852,8 @@ export const useSimulation = () => {
                 steps: []
             };
             
-            // Immediately save the empty conversation to database
-            try {
-                await api.saveScenario(newEmptyScenario.title, newEmptyScenario, newChatId);
-                // Force refresh scenarios
-                await refreshScenarios();
-                // Small delay to ensure state updates
-                await new Promise(resolve => setTimeout(resolve, 50));
-            } catch (e) {
-                console.error("Failed to create new chat", e);
-                alert("创建新对话失败，请重试");
-                return;
-            }
+            // 不再立即保存空会话，等待用户发送第一条消息时才保存
+            // 这样可以避免历史记录中出现大量空会话
 
             // Reset for New Conversation (Stay in Live Mode)
             setIsPlaying(false);
