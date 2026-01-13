@@ -122,37 +122,6 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({ visibleSteps, erasedInd
 
     return (
         <div className="h-full flex flex-col gap-4">
-            {/* Scores Header */}
-            <div ref={evaluationRef} className="grid grid-cols-2 gap-6 px-2">
-                {evaluationResult ? (
-                    <>
-                        <div className="flex justify-center">
-                            <span className="text-xs font-bold text-slate-500 bg-white px-3 py-1 rounded border border-slate-200 shadow-sm">
-                                Score: {evaluationResult.model_a_score.toFixed(1)}
-                            </span>
-                        </div>
-                        <div className="flex justify-center">
-                            <span className="text-xs font-bold text-indigo-600 bg-white px-3 py-1 rounded border border-indigo-100 shadow-sm">
-                                Score: {evaluationResult.model_b_score.toFixed(1)}
-                            </span>
-                        </div>
-                    </>
-                ) : (
-                    <>
-                        <div className="flex justify-center">
-                            <span className="text-xs font-bold text-slate-400 bg-white px-3 py-1 rounded border border-slate-200 shadow-sm">
-                                Score: -
-                            </span>
-                        </div>
-                        <div className="flex justify-center">
-                            <span className="text-xs font-bold text-slate-400 bg-white px-3 py-1 rounded border border-slate-200 shadow-sm">
-                                Score: -
-                            </span>
-                        </div>
-                    </>
-                )}
-            </div>
-
             {/* Main Content - Single scrollable container with aligned segments */}
             <div 
                 className="flex-1 overflow-y-auto bg-slate-50 rounded-2xl scrollbar-thin scrollbar-thumb-slate-200"
@@ -160,7 +129,7 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({ visibleSteps, erasedInd
                 onScroll={handleScroll}
             >
                 {/* Column Headers - Fixed at top */}
-                <div className="sticky top-0 bg-slate-50 z-20 px-4 pt-4 pb-2">
+                <div ref={evaluationRef} className="sticky top-0 bg-slate-50 z-20 px-4 pt-4 pb-2">
                     <div className="grid grid-cols-2 gap-6">
                         <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
                             <span className="font-bold text-slate-600 text-sm">Original (Base)</span>
