@@ -151,6 +151,7 @@ You have access to the following tools:
 
 You must respond in JSON format with 'thought', 'action', 'action_args', and 'action_weights'.
 'action_weights' must be a JSON object mapping EVERY valid action to a non-negative number (not necessarily normalized; the server will normalize them to sum to 1).
+IMPORTANT: Do NOT return a one-hot distribution (e.g., only one action has non-zero weight). Assign non-zero weight to multiple actions (at least 3 when possible) to reflect uncertainty.
 Valid actions are: {json.dumps(admissible_commands)}
 If you have enough information, use "Finish" and provide the final answer in "action_args" as {{"final_answer": "your answer"}}.
 """
@@ -190,6 +191,29 @@ def extract_and_normalize_probabilities(output: str, candidates: List[str]) -> D
             return 0.0
         return v if v > 0.0 else 0.0
 
+    def _geometric_fallback(top_action: Optional[str]) -> Dict[str, float]:
+        # Biased-but-non-degenerate distribution: top_action gets fixed mass,
+        # the rest get a geometric decay so p2>p3>... (no flat plateau).
+        ratio = 0.75
+
+        if top_action is not None and top_action in candidates:
+            top_mass = 0.4
+            others = [c for c in candidates if c != top_action]
+            denom = sum((ratio**i) for i in range(len(others)))
+            if denom <= 0.0:
+                return uniform_prob(candidates)
+
+            remainder = 1.0 - top_mass
+            scores = {top_action: top_mass}
+            for i, c in enumerate(others):
+                scores[c] = remainder * (ratio**i) / denom
+            return scores
+
+        denom = sum((ratio**i) for i in range(len(candidates)))
+        if denom <= 0.0:
+            return uniform_prob(candidates)
+        return {c: (ratio**i) / denom for i, c in enumerate(candidates)}
+
     data = _parse_json_payload(output) or {}
     chosen = data.get("action", "Finish")
 
@@ -208,29 +232,14 @@ def extract_and_normalize_probabilities(output: str, candidates: List[str]) -> D
 
         total = sum(weights.values())
         if total > 0.0:
-            return {k: v / total for k, v in weights.items()}
+            normalized = {k: v / total for k, v in weights.items()}
+            # Treat near-one-hot as invalid: it collapses UI bins and usually indicates the model ignored instructions.
+            support = sum(1 for p in normalized.values() if p > 1e-9)
+            if support < 2:
+                return _geometric_fallback(chosen if chosen in candidates else None)
+            return normalized
 
-    # Fallback: keep the chosen action high, but give the rest a geometric decay so p2>p3>... (no flat plateau).
-    if chosen in candidates:
-        top_mass = 0.4
-        others = [c for c in candidates if c != chosen]
-        ratio = 0.75
-        denom = sum((ratio**i) for i in range(len(others)))
-        if denom <= 0.0:
-            return uniform_prob(candidates)
-
-        remainder = 1.0 - top_mass
-        scores = {chosen: top_mass}
-        for i, c in enumerate(others):
-            scores[c] = remainder * (ratio**i) / denom
-        return scores
-
-    # If we couldn't identify a valid chosen action, still return a multi-step distribution (deterministic by order).
-    ratio = 0.75
-    denom = sum((ratio**i) for i in range(len(candidates)))
-    if denom <= 0.0:
-        return uniform_prob(candidates)
-    return {c: (ratio**i) / denom for i, c in enumerate(candidates)}
+    return _geometric_fallback(chosen if chosen in candidates else None)
 
 @app.post("/api/init")
 async def init_session(req: InitRequest):
