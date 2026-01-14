@@ -17,16 +17,24 @@ interface PageProps {
     totalPages: number;
     frontTexture?: THREE.Texture | null;
     backTexture?: THREE.Texture | null;
+    isLeftPage?: boolean;
+    currentSpread: number;
+    visible?: boolean;
 }
 
-function Page({ number, opened, totalPages, frontTexture, backTexture }: PageProps) {
+function Page({ number, opened, totalPages, frontTexture, backTexture, isLeftPage = false, currentSpread, visible = true }: PageProps) {
     const group = useRef<THREE.Group>(null);
     const meshRef = useRef<THREE.Mesh>(null);
 
+    const zRef = useRef(0);
+    const opacityRef = useRef(visible ? 1 : 0);
+    
     useFrame((_, delta) => {
         if (!group.current) return;
 
+        // All pages rotate around the spine (x=0)
         const targetRotation = opened ? -Math.PI : 0;
+        
         const rotDiff = targetRotation - group.current.rotation.y;
         
         // Smooth easing animation
@@ -35,16 +43,30 @@ function Page({ number, opened, totalPages, frontTexture, backTexture }: PagePro
 
         const progress = Math.max(0, Math.min(1, -group.current.rotation.y / Math.PI));
         
-        // Spacing for depth
-        const spacing = 0.02;
-        const closedZ = (totalPages - number) * spacing;
-        const openedZ = number * spacing;
+        // Z position - simpler calculation
+        const spacing = 0.008;
+        const frontZ = 0.5;
+        
+        let targetZ: number;
+        if (number === currentSpread || (opened && number === currentSpread - 1)) {
+            // Current visible pages at front
+            targetZ = frontZ;
+        } else if (number < currentSpread) {
+            // Already flipped pages - stack behind
+            targetZ = frontZ - (currentSpread - number) * spacing;
+        } else {
+            // Not yet flipped pages - stack behind
+            targetZ = frontZ - (number - currentSpread) * spacing;
+        }
+        
+        // Smoothly animate Z position
+        zRef.current += (targetZ - zRef.current) * easing;
 
-        // Lift curve
+        // Lift curve during animation
         const liftHeight = 1.5;
         const lift = Math.sin(progress * Math.PI) * liftHeight;
 
-        group.current.position.z = THREE.MathUtils.lerp(closedZ, openedZ, progress) + lift;
+        group.current.position.z = zRef.current + lift;
     });
 
     const isCover = number === 0;
@@ -84,12 +106,15 @@ function Page({ number, opened, totalPages, frontTexture, backTexture }: PagePro
 
     // Define materials array
     const materialArray = useMemo(() => {
-        // Edge material - light gray for paper edges
+        // Edge material - brown color for paper edges
         const sideMat = new THREE.MeshStandardMaterial({ 
-            color: '#F5F5F5',
+            color: '#8B7355',
             roughness: 0.4,
             metalness: 0.0
         });
+
+        // Paper color - warm brown/tan
+        const paperColor = '#D2B48C';
 
         // FRONT face
         let frontMat;
@@ -104,7 +129,7 @@ function Page({ number, opened, totalPages, frontTexture, backTexture }: PagePro
             });
         } else {
             frontMat = new THREE.MeshStandardMaterial({
-                color: '#FFFFFF',
+                color: paperColor,
                 alphaMap: roundedMask,
                 transparent: true,
                 roughness: ROUGHNESS,
@@ -125,7 +150,7 @@ function Page({ number, opened, totalPages, frontTexture, backTexture }: PagePro
             });
         } else {
             backMat = new THREE.MeshStandardMaterial({ 
-                color: '#FFFFFF',
+                color: paperColor,
                 alphaMap: roundedMask,
                 transparent: true,
                 roughness: ROUGHNESS,
@@ -138,6 +163,7 @@ function Page({ number, opened, totalPages, frontTexture, backTexture }: PagePro
 
     return (
         <group ref={group}>
+            {/* All pages pivot from spine (x=0), positioned to the right */}
             <group position={[PAGE_WIDTH / 2, 0, 0]}>
                 {/* Main page */}
                 <mesh ref={meshRef} material={materialArray} castShadow receiveShadow>
@@ -179,9 +205,9 @@ const Book = ({ pageIndex, setTotalPages, setCurrentPage }: { pageIndex: number,
     const lastTexture = useTexture('/book_last.png');
     lastTexture.colorSpace = THREE.SRGBColorSpace;
 
-    // Split each spread into left and right halves
+    // Split each spread into left and right halves (including last page)
     const spreads = useMemo(() => {
-        return spreadTextures.map(spreadTexture => {
+        const allSpreads = [...spreadTextures, lastTexture].map(spreadTexture => {
             const left = spreadTexture.clone();
             left.colorSpace = THREE.SRGBColorSpace;
             left.offset.set(0, 0);
@@ -196,40 +222,21 @@ const Book = ({ pageIndex, setTotalPages, setCurrentPage }: { pageIndex: number,
 
             return { left, right };
         });
-    }, [spreadTextures]);
+        return allSpreads;
+    }, [spreadTextures, lastTexture]);
 
-    // Split last page into left and right halves
-    const lastSpread = useMemo(() => {
-        const left = lastTexture.clone();
-        left.colorSpace = THREE.SRGBColorSpace;
-        left.offset.set(0, 0);
-        left.repeat.set(0.5, 1);
-        left.needsUpdate = true;
-
-        const right = lastTexture.clone();
-        right.colorSpace = THREE.SRGBColorSpace;
-        right.offset.set(0.5, 0);
-        right.repeat.set(0.5, 1);
-        right.needsUpdate = true;
-
-        return { left, right };
-    }, [lastTexture]);
-
-    // Total pages structure:
-    // Page 0: Cover (front=cover, back=white)
-    // Pages 1-20: 10 spreads × 2 pages each
-    // Pages 21-22: Last spread × 2 pages
-    const totalPages = 22; // Cover + (10 spreads × 2) + (last spread × 2)
+    // Total pages: cover + 11 spread right pages = 12 pages
+    const totalPages = 12;
     
     useEffect(() => {
-        setTotalPages(11); // 0=cover, 1-10=spreads, 11=last spread
+        setTotalPages(11); // 12 navigation points: 0=cover, 1-11=spreads
         setCurrentPage(pageIndex);
     }, [pageIndex, setTotalPages, setCurrentPage]);
 
     // Build all pages
     const allPages = [];
     
-    // Cover page (page 0) - flips when we go to any spread
+    // Cover page (page 0)
     allPages.push(
         <Page
             key={0}
@@ -237,67 +244,33 @@ const Book = ({ pageIndex, setTotalPages, setCurrentPage }: { pageIndex: number,
             totalPages={totalPages}
             opened={pageIndex >= 1}
             frontTexture={coverTexture}
-            backTexture={null}
+            backTexture={spreads[0].left}
+            isLeftPage={false}
+            currentSpread={pageIndex}
+            visible={true}
         />
     );
     
-    // Spread pages (pages 1-20)
+    // Spread pages
     spreads.forEach((spread, spreadIndex) => {
-        const leftPageNumber = spreadIndex * 2 + 1;
-        const rightPageNumber = spreadIndex * 2 + 2;
-        const spreadNumber = spreadIndex + 1; // spread 1, 2, 3, etc.
+        const pageNumber = spreadIndex + 1;
+        const spreadNumber = spreadIndex + 1;
+        const nextSpread = spreads[spreadIndex + 1];
         
-        // Left page: flips when we reach or pass this spread
-        // When at spreadNumber, left page is flipped showing its back (left half)
         allPages.push(
             <Page
-                key={leftPageNumber}
-                number={leftPageNumber}
-                totalPages={totalPages}
-                opened={pageIndex >= spreadNumber}
-                frontTexture={null}
-                backTexture={spread.left}
-            />
-        );
-        
-        // Right page: stays unflipped when viewing this spread, flips when we move past
-        // When at spreadNumber, right page shows its front (right half)
-        allPages.push(
-            <Page
-                key={rightPageNumber}
-                number={rightPageNumber}
+                key={pageNumber}
+                number={pageNumber}
                 totalPages={totalPages}
                 opened={pageIndex > spreadNumber}
                 frontTexture={spread.right}
-                backTexture={null}
+                backTexture={nextSpread ? nextSpread.left : null}
+                isLeftPage={false}
+                currentSpread={pageIndex}
+                visible={true}
             />
         );
     });
-    
-    // Last spread (pages 21-22) - shows when pageIndex=11
-    // Left page of last spread
-    allPages.push(
-        <Page
-            key={21}
-            number={21}
-            totalPages={totalPages}
-            opened={pageIndex >= 11}
-            frontTexture={null}
-            backTexture={lastSpread.left}
-        />
-    );
-    
-    // Right page of last spread
-    allPages.push(
-        <Page
-            key={22}
-            number={22}
-            totalPages={totalPages}
-            opened={pageIndex > 11}
-            frontTexture={lastSpread.right}
-            backTexture={null}
-        />
-    );
 
     return (
         <group
@@ -326,22 +299,22 @@ export default function BookDemo({ onBack }: { onBack: () => void }) {
     };
 
     return (
-        <div className="w-full h-screen bg-slate-900 relative overflow-hidden font-sans">
-            {/* Dark background with subtle gradients */}
+        <div className="w-full h-screen bg-sky-100 relative overflow-hidden font-sans">
+            {/* Light blue background with subtle gradients */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] bg-slate-800/30 rounded-full blur-3xl" />
-                <div className="absolute top-[40%] -right-[10%] w-[40%] h-[60%] bg-slate-700/20 rounded-full blur-3xl" />
+                <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] bg-sky-200/50 rounded-full blur-3xl" />
+                <div className="absolute top-[40%] -right-[10%] w-[40%] h-[60%] bg-blue-200/40 rounded-full blur-3xl" />
             </div>
 
             <button
                 onClick={onBack}
-                className="absolute top-8 left-8 z-50 text-slate-400 hover:text-slate-100 transition-colors flex items-center gap-2 font-medium"
+                className="absolute top-8 left-8 z-50 text-sky-600 hover:text-sky-800 transition-colors flex items-center gap-2 font-medium"
             >
                 ← Back
             </button>
 
             {/* Enhanced page indicator */}
-            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-slate-800/70 backdrop-blur-lg px-8 py-4 rounded-full shadow-lg border border-slate-700/60 transition-all duration-300">
+            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-white/70 backdrop-blur-lg px-8 py-4 rounded-full shadow-lg border border-sky-200/60 transition-all duration-300">
                 {new Array(totalPages + 1).fill(0).map((_, i) => (
                     <div
                         key={i}
@@ -349,8 +322,8 @@ export default function BookDemo({ onBack }: { onBack: () => void }) {
                         className={`
                             rounded-full transition-all duration-300 cursor-pointer
                             ${i === currentPage
-                                ? 'w-3 h-3 bg-gradient-to-r from-indigo-400 to-purple-400 scale-125 shadow-lg shadow-indigo-500/50'
-                                : 'w-2 h-2 bg-slate-600 hover:bg-slate-400 hover:scale-110'
+                                ? 'w-3 h-3 bg-gradient-to-r from-sky-400 to-blue-500 scale-125 shadow-lg shadow-sky-500/50'
+                                : 'w-2 h-2 bg-sky-300 hover:bg-sky-400 hover:scale-110'
                             }
                         `}
                     />
@@ -365,8 +338,8 @@ export default function BookDemo({ onBack }: { onBack: () => void }) {
             >
                 {/* Visual indicator on hover */}
                 <div className="absolute left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    <div className="bg-slate-800/90 backdrop-blur-md rounded-full p-3 shadow-lg border border-slate-700">
-                        <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="bg-white/90 backdrop-blur-md rounded-full p-3 shadow-lg border border-sky-200">
+                        <svg className="w-8 h-8 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
                     </div>
@@ -379,8 +352,8 @@ export default function BookDemo({ onBack }: { onBack: () => void }) {
             >
                 {/* Visual indicator on hover */}
                 <div className="absolute right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    <div className="bg-slate-800/90 backdrop-blur-md rounded-full p-3 shadow-lg border border-slate-700">
-                        <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="bg-white/90 backdrop-blur-md rounded-full p-3 shadow-lg border border-sky-200">
+                        <svg className="w-8 h-8 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                     </div>
@@ -442,7 +415,7 @@ export default function BookDemo({ onBack }: { onBack: () => void }) {
                 <Environment preset="apartment" />
                 
                 {/* Subtle fog for depth */}
-                <fog attach="fog" args={['#0f172a', 12, 25]} />
+                <fog attach="fog" args={['#e0f2fe', 12, 25]} />
             </Canvas>
         </div>
     );
