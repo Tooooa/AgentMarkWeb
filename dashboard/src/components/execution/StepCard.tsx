@@ -13,6 +13,7 @@ interface StepCardProps {
     showWatermarkDetails?: boolean;
     showDistribution?: boolean;
     displayIndex?: number; // 用于显示的步骤序号，如果不提供则使用 step.stepIndex
+    variant?: 'default' | 'add_agent';
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -28,7 +29,8 @@ const CustomTooltip = ({ active, payload }: any) => {
     return null;
 };
 
-const StepCard: React.FC<StepCardProps> = ({ step, isErased, showWatermarkDetails = true, showDistribution = false, displayIndex }) => {
+const StepCard: React.FC<StepCardProps> = ({ step, isErased, showWatermarkDetails = false, showDistribution = false, displayIndex, variant = 'default' }) => {
+    const isAddAgent = variant === 'add_agent';
     const { t, locale } = useI18n();
     const [isDetailOpen, setIsDetailOpen] = useState(false);
 
@@ -82,17 +84,27 @@ const StepCard: React.FC<StepCardProps> = ({ step, isErased, showWatermarkDetail
             >
                 <div className="flex gap-4 flex-row-reverse max-w-[80%]">
                     <div className="flex-shrink-0 mt-1">
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            isAddAgent ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600'
+                        }`}>
                             <User size={18} />
                         </div>
                     </div>
                     <div className="flex-1 text-right">
-                        <div className="bg-indigo-50 border border-indigo-100 rounded-2xl rounded-tr-none p-5 text-indigo-900 text-sm shadow-sm inline-block text-left relative overflow-hidden">
+                        <div className={`rounded-2xl rounded-tr-none p-5 text-sm shadow-sm inline-block text-left relative overflow-hidden ${
+                            isAddAgent ? 'bg-amber-50 border border-amber-100 text-amber-900' : 'bg-indigo-50 border border-indigo-100 text-indigo-900'
+                        }`}>
                             {/* Decorative background element like in FlowFeed */}
-                            <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-indigo-100/50 to-transparent rounded-bl-full pointer-events-none" />
+                            <div className={`absolute top-0 right-0 w-16 h-16 bg-gradient-to-br to-transparent rounded-bl-full pointer-events-none ${
+                                isAddAgent ? 'from-amber-100/50' : 'from-indigo-100/50'
+                            }`} />
 
-                            <p className="font-bold text-[10px] text-indigo-400 mb-2 uppercase tracking-wider flex items-center gap-1.5">
-                                <div className="w-1 h-1 rounded-full bg-indigo-400" />
+                            <p className={`font-bold text-[10px] mb-2 uppercase tracking-wider flex items-center gap-1.5 ${
+                                isAddAgent ? 'text-amber-400' : 'text-indigo-400'
+                            }`}>
+                                <div className={`w-1 h-1 rounded-full ${
+                                    isAddAgent ? 'bg-amber-400' : 'bg-indigo-400'
+                                }`} />
                                 {locale === 'zh' ? '用户继续' : 'User Continuation'}
                             </p>
                             <p className="leading-relaxed relative z-10 font-medium">
@@ -109,7 +121,9 @@ const StepCard: React.FC<StepCardProps> = ({ step, isErased, showWatermarkDetail
         <div className="flex gap-4 group">
             {/* Avatar Column */}
             <div className="flex-shrink-0 flex flex-col items-center gap-2 pt-2">
-                <div className="w-10 h-10 rounded-full bg-indigo-600 shadow-md shadow-indigo-200 flex items-center justify-center text-white z-10 relative">
+                <div className={`w-10 h-10 rounded-full shadow-md flex items-center justify-center text-white z-10 relative ${
+                    isAddAgent ? 'bg-amber-600 shadow-amber-200' : 'bg-indigo-600 shadow-indigo-200'
+                }`}>
                     <Bot size={20} />
 
                     {/* Step Badge */}
@@ -132,7 +146,7 @@ const StepCard: React.FC<StepCardProps> = ({ step, isErased, showWatermarkDetail
                             </div>
                             <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">{t('step')} #{stepNumber}</span>
                         </div>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide ${step.stepType === 'finish' ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-50 text-indigo-500'}`}>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide ${step.stepType === 'finish' ? 'bg-emerald-100 text-emerald-600' : isAddAgent ? 'bg-amber-50 text-amber-500' : 'bg-indigo-50 text-indigo-500'}`}>
                             {step.stepType}
                         </span>
                     </div>
@@ -182,7 +196,9 @@ const StepCard: React.FC<StepCardProps> = ({ step, isErased, showWatermarkDetail
                                         </ResponsiveContainer>
                                         {/* 为 baseline 模式也添加放大按钮 */}
                                         {!showWatermarkDetails && (
-                                            <button onClick={(e) => { e.stopPropagation(); setIsDetailOpen(true); }} className="absolute top-0 right-0 p-1 hover:bg-white rounded shadow-sm transition-colors text-indigo-500 z-10">
+                                            <button onClick={(e) => { e.stopPropagation(); setIsDetailOpen(true); }} className={`absolute top-0 right-0 p-1 hover:bg-white rounded shadow-sm transition-colors z-10 ${
+                                                isAddAgent ? 'text-amber-500' : 'text-indigo-500'
+                                            }`}>
                                                 <RotateCcw size={10} />
                                             </button>
                                         )}
@@ -204,7 +220,9 @@ const StepCard: React.FC<StepCardProps> = ({ step, isErased, showWatermarkDetail
                                                         </Bar>
                                                     </BarChart>
                                                 </ResponsiveContainer>
-                                                <button onClick={(e) => { e.stopPropagation(); setIsDetailOpen(true); }} className="absolute top-0 right-0 p-1 hover:bg-white rounded shadow-sm transition-colors text-indigo-500 z-10">
+                                                <button onClick={(e) => { e.stopPropagation(); setIsDetailOpen(true); }} className={`absolute top-0 right-0 p-1 hover:bg-white rounded shadow-sm transition-colors z-10 ${
+                                                    isAddAgent ? 'text-amber-500' : 'text-indigo-500'
+                                                }`}>
                                                     <RotateCcw size={10} />
                                                 </button>
                                             </div>
@@ -214,14 +232,18 @@ const StepCard: React.FC<StepCardProps> = ({ step, isErased, showWatermarkDetail
 
                                 {/* Pipeline Footer */}
                                 {showWatermarkDetails && step.watermark && (
-                                    <div className="bg-indigo-50/50 rounded-lg p-1.5 flex items-center justify-between text-[10px] text-slate-500 font-mono border border-indigo-50">
+                                    <div className={`rounded-lg p-1.5 flex items-center justify-between text-[10px] text-slate-500 font-mono border ${
+                                        isAddAgent ? 'bg-amber-50/50 border-amber-50' : 'bg-indigo-50/50 border-indigo-50'
+                                    }`}>
                                         <div className="flex items-center gap-1.5">
-                                            <div className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold">
+                                            <div className={`px-1.5 py-0.5 rounded font-bold ${
+                                                isAddAgent ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'
+                                            }`}>
                                                 {locale === 'zh' ? '载荷' : 'PAYLOAD'} {step.watermark.bits}
                                             </div>
                                             <span>{locale === 'zh' ? '排序切片' : 'Sort & Slice'}</span>
                                             <ArrowRight size={8} />
-                                            <span>{locale === 'zh' ? '选择分箱' : 'Select Bin'} <span className="text-indigo-600 font-bold">T_{step.distribution.findIndex(x => x.isSelected) + 1}</span></span>
+                                            <span>{locale === 'zh' ? '选择分箱' : 'Select Bin'} <span className={`font-bold ${isAddAgent ? 'text-amber-600' : 'text-indigo-600'}`}>T_{step.distribution.findIndex(x => x.isSelected) + 1}</span></span>
                                             <ArrowRight size={8} />
                                             <RotateCcw size={8} />
                                             <span>{locale === 'zh' ? '采样' : 'Sample'}</span>

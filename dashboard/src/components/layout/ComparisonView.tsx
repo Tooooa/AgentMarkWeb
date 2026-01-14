@@ -17,6 +17,7 @@ interface ComparisonViewProps {
     evaluationRef?: React.RefObject<HTMLDivElement>;
     utilityMonitorRef?: React.RefObject<HTMLDivElement>;
     chartRef?: React.RefObject<HTMLDivElement>;
+    variant?: 'default' | 'add_agent';
 }
 
 // 1221: Segment structure for aligning user questions
@@ -36,8 +37,10 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
     watermarkedPromptText,
     evaluationRef,
     utilityMonitorRef,
-    chartRef
+    chartRef,
+    variant = 'default'
 }) => {
+    const isAddAgent = variant === 'add_agent';
     const { locale } = useI18n();
 
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -115,12 +118,18 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
     // Render user query bubble
     const renderUserQuery = (query: string, key: string) => (
         <div key={key} className="col-span-2 my-4">
-            <div className="w-full bg-gradient-to-r from-indigo-50/50 to-violet-50/50 border border-indigo-100 rounded-2xl p-6">
+            <div className={`w-full bg-gradient-to-r rounded-2xl p-6 ${
+                isAddAgent 
+                    ? 'from-amber-50/50 to-yellow-50/50 border border-amber-100' 
+                    : 'from-indigo-50/50 to-violet-50/50 border border-indigo-100'
+            }`}>
                 <div className="flex gap-3 max-w-[600px] mx-auto">
                     <div className="flex-1">
                         <div className="bg-white border border-slate-200 rounded-2xl p-5 text-sm shadow-sm flex items-center gap-4">
                             <div className="flex-shrink-0">
-                                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                    isAddAgent ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600'
+                                }`}>
                                     <User size={16} />
                                 </div>
                             </div>
@@ -150,8 +159,14 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
                                 {baselinePromptText || '—'}
                             </pre>
                         </div>
-                        <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-4">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 mb-2">Watermarked Prompt</p>
+                        <div className={`rounded-xl p-4 ${
+                            isAddAgent 
+                                ? 'bg-amber-50/70 border border-amber-100' 
+                                : 'bg-indigo-50/70 border border-indigo-100'
+                        }`}>
+                            <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${
+                                isAddAgent ? 'text-amber-500' : 'text-indigo-400'
+                            }`}>Watermarked Prompt</p>
                             <pre className="text-xs text-slate-600 whitespace-pre-wrap break-words max-h-56 overflow-auto">
                                 {watermarkedPromptText || '—'}
                             </pre>
@@ -176,8 +191,14 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
                         <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
                             <span className="font-bold text-slate-600 text-sm">{locale === 'zh' ? '无水印Agent' : 'Original (Base)'}</span>
                         </div>
-                        <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl shadow-sm">
-                            <span className="font-bold text-indigo-700 text-sm">{locale === 'zh' ? '有水印Agent' : 'Ours (Watermarked)'}</span>
+                        <div className={`p-3 rounded-xl shadow-sm ${
+                            isAddAgent 
+                                ? 'bg-amber-50 border border-amber-200' 
+                                : 'bg-indigo-50 border border-indigo-200'
+                        }`}>
+                            <span className={`font-bold text-sm ${
+                                isAddAgent ? 'text-amber-700' : 'text-indigo-700'
+                            }`}>{locale === 'zh' ? '有水印Agent' : 'Ours (Watermarked)'}</span>
                         </div>
                     </div>
                 </div>
@@ -209,6 +230,7 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
                                                     showWatermarkDetails={false}
                                                     showDistribution={true}
                                                     displayIndex={prevBaselineCount + stepIdx + 1}
+                                                    variant={variant}
                                                 />
                                             ))
                                         ) : (
@@ -219,7 +241,9 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
                                     </div>
 
                                     {/* Right: Watermarked steps */}
-                                    <div ref={segIndex === 0 ? chartRef : undefined} className="space-y-4 p-2 bg-white rounded-indigo-xl border border-indigo-100">
+                                    <div ref={segIndex === 0 ? chartRef : undefined} className={`space-y-4 p-2 bg-white rounded-xl border ${
+                                        isAddAgent ? 'border-amber-100' : 'border-indigo-100'
+                                    }`}>
                                         {segment.watermarkedSteps.length > 0 ? (
                                             segment.watermarkedSteps.map((step, stepIdx) => (
                                                 <StepCard
@@ -228,6 +252,7 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
                                                     isErased={erasedIndices.has(step.stepIndex)}
                                                     showWatermarkDetails={true}
                                                     displayIndex={prevWatermarkedCount + stepIdx + 1}
+                                                    variant={variant}
                                                 />
                                             ))
                                         ) : (
