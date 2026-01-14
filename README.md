@@ -237,7 +237,7 @@ source ~/miniconda3/etc/profile.d/conda.sh && conda activate AgentMark
 export DEEPSEEK_API_KEY=sk-your-key
 export TARGET_LLM_MODEL=deepseek-chat
 export AGENTMARK_DEBUG=1
-export AGENTMARK_TWO_PASS=0   # Use "proxy constructs tool_calls" plugin mode
+export AGENTMARK_TOOL_MODE=proxy   # Use "proxy constructs tool_calls" plugin mode
 
 uvicorn agentmark.proxy.server:app --host 0.0.0.0 --port 8001
 ```
@@ -250,7 +250,7 @@ conda activate AgentMark
 $env:DEEPSEEK_API_KEY="sk-your-key"
 $env:TARGET_LLM_MODEL="deepseek-chat"
 $env:AGENTMARK_DEBUG="1"
-$env:AGENTMARK_TWO_PASS="0"
+$env:AGENTMARK_TOOL_MODE="proxy"
 
 uvicorn agentmark.proxy.server:app --host 0.0.0.0 --port 8001
 ```

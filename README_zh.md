@@ -233,7 +233,7 @@ source ~/miniconda3/etc/profile.d/conda.sh && conda activate AgentMark
 export DEEPSEEK_API_KEY=sk-你的key
 export TARGET_LLM_MODEL=deepseek-chat
 export AGENTMARK_DEBUG=1
-export AGENTMARK_TWO_PASS=0   # 走“代理构造 tool_calls”
+export AGENTMARK_TOOL_MODE=proxy   # 网关构造 tool_calls
 
 uvicorn agentmark.proxy.server:app --host 0.0.0.0 --port 8001
 ```
