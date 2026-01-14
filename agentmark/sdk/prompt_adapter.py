@@ -12,8 +12,12 @@ from typing import Dict, List, Optional, Tuple, Any
 
 from agentmark.sdk import AgentWatermarker
 
+<<<<<<< Updated upstream
 DEFAULT_PROB_TEMPERATURE = 1.0
 DEFAULT_MIN_WEIGHT = 1e-4
+=======
+DEFAULT_PROB_TEMPERATURE = 1.5
+>>>>>>> Stashed changes
 
 
 PROMPT_INSTRUCTION = """You are an action-selection assistant.
@@ -26,10 +30,14 @@ Example:
 }
 Requirements:
 - action_weights MUST include every candidate (or top-K if instructed).
+<<<<<<< Updated upstream
 - All action_weights MUST be > 0. Use small values like 1e-3 for unlikely actions.
 - action_args MUST include every candidate. For each candidate, provide a JSON object of arguments.
   Fill any arguments you can infer from the user request and tool schema. If unsure, still include
   keys with placeholder values (empty string, 0, or null) instead of omitting the candidate.
+=======
+- action_args MUST include every candidate; use {} if arguments are unknown.
+>>>>>>> Stashed changes
 - Sum does not need to be exact; we will normalize.
 - All action_weights must be > 0; do NOT return all zeros.
 - Avoid uniform weights; if uncertain, break ties with slight preferences by candidate order.
@@ -151,6 +159,7 @@ def _force_uniform(probs: Dict[str, float], fallback_actions: Optional[List[str]
     return {k: uniform for k in keys}
 
 
+<<<<<<< Updated upstream
 def _maybe_bias_uniform(
     probs: Dict[str, float],
     fallback_actions: Optional[List[str]],
@@ -176,6 +185,8 @@ def _maybe_bias_uniform(
     return normalize_probabilities(weights)
 
 
+=======
+>>>>>>> Stashed changes
 def _getenv(name: str) -> Optional[str]:
     # Local import for safety in reloaded contexts.
     import os as _os
@@ -233,7 +244,10 @@ def choose_action_from_prompt_output(
             probs = apply_temperature(probs, float(temp_env))
         except ValueError:
             pass
+<<<<<<< Updated upstream
     probs = _maybe_bias_uniform(probs, fallback_actions)
+=======
+>>>>>>> Stashed changes
 
     res = wm.sample(probabilities=probs, context=context, history=history, round_num=round_num)
     return res.action, probs
@@ -316,7 +330,10 @@ class PromptWatermarkWrapper:
                 probs = apply_temperature(probs, float(temp_env))
             except ValueError:
                 pass
+<<<<<<< Updated upstream
         probs = _maybe_bias_uniform(probs, fallback_actions)
+=======
+>>>>>>> Stashed changes
 
         res = self.wm.sample(probabilities=probs, context=context, history=history, round_num=round_num)
 
