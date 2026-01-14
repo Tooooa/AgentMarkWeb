@@ -663,8 +663,6 @@ def _build_baseline_step(
         else:
             step_type = "tool"
         action = f"Call: {action_name}" if action_name else action
-    if step_type == "tool":
-        final_answer = None
 
     tokens_used = _extract_tokens_used(completion)
     if latency <= 0:
@@ -790,6 +788,8 @@ def _build_add_agent_step(
     bits_embedded = frontend.get("watermark_meta", {}).get("bits_embedded") or 0
     matrix_rows = [[1] for _ in range(int(bits_embedded))]
     final_answer = (completion_content or "").strip()
+    if not final_answer and raw_text:
+        final_answer = raw_text.strip()
     has_tool_calls = bool(completion_tool_calls)
     step_type = "tool" if action else "other"
     if final_answer and not has_tool_calls:
@@ -1103,11 +1103,16 @@ async def add_agent_turn(req: AddAgentTurnRequest):
             raise HTTPException(status_code=502, detail=detail)
     latency = time.time() - started_at
     baseline_step = None
+    baseline_prompt_trace = None
     if use_baseline:
         base_started = time.time()
         try:
             base_client = _build_base_llm_client(req.apiKey or session.api_key)
             base_messages = _build_add_agent_scoring_messages(req.message.strip())
+            baseline_prompt_trace = {
+                "scoring_messages": base_messages,
+                "scoring_prompt_text": _render_prompt_messages(base_messages),
+            }
             base_completion = base_client.chat.completions.create(
                 model=_resolve_base_model(model_name),
                 messages=base_messages,
@@ -1195,6 +1200,7 @@ async def add_agent_turn(req: AddAgentTurnRequest):
         "sessionId": req.sessionId,
         "step": step,
         "promptTrace": prompt_trace,
+        "baselinePromptTrace": baseline_prompt_trace,
         "watermark": watermark,
     }
 

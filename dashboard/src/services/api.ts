@@ -35,6 +35,7 @@ export interface AddAgentTurnResponse {
     sessionId: string;
     step: any;
     promptTrace?: any;
+    baselinePromptTrace?: any;
     watermark?: any;
 }
 

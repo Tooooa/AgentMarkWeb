@@ -11,6 +11,8 @@ interface ComparisonViewProps {
     scenarioId?: string;
     evaluationResult?: { model_a_score: number, model_b_score: number, reason: string } | null;
     userQuery?: string;
+    baselinePromptText?: string;
+    watermarkedPromptText?: string;
     evaluationRef?: React.RefObject<HTMLDivElement>;
     utilityMonitorRef?: React.RefObject<HTMLDivElement>;
     chartRef?: React.RefObject<HTMLDivElement>;
@@ -23,7 +25,18 @@ interface Segment {
     userInput?: Step; // The user_input step that ends this segment (if any)
 }
 
-const ComparisonView: React.FC<ComparisonViewProps> = ({ visibleSteps, erasedIndices, scenarioId, evaluationResult, userQuery, evaluationRef, utilityMonitorRef, chartRef }) => {
+const ComparisonView: React.FC<ComparisonViewProps> = ({
+    visibleSteps,
+    erasedIndices,
+    scenarioId,
+    evaluationResult,
+    userQuery,
+    baselinePromptText,
+    watermarkedPromptText,
+    evaluationRef,
+    utilityMonitorRef,
+    chartRef
+}) => {
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
@@ -120,6 +133,33 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({ visibleSteps, erasedInd
         </div>
     );
 
+    const renderPromptComparison = () => {
+        if (!baselinePromptText && !watermarkedPromptText) return null;
+        return (
+            <div className="col-span-2 my-4">
+                <div className="w-full bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                    <div className="flex items-center justify-between text-xs text-slate-400 font-bold uppercase tracking-wider">
+                        <span>Prompt Comparison</span>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-4">
+                        <div className="bg-slate-50/70 border border-slate-100 rounded-xl p-4">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Original Prompt</p>
+                            <pre className="text-xs text-slate-600 whitespace-pre-wrap break-words max-h-56 overflow-auto">
+                                {baselinePromptText || '—'}
+                            </pre>
+                        </div>
+                        <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-4">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 mb-2">Watermarked Prompt</p>
+                            <pre className="text-xs text-slate-600 whitespace-pre-wrap break-words max-h-56 overflow-auto">
+                                {watermarkedPromptText || '—'}
+                            </pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="h-full flex flex-col gap-4">
             {/* Main Content - Single scrollable container with aligned segments */}
@@ -141,7 +181,8 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({ visibleSteps, erasedInd
                 </div>
 
                 {/* Content area with padding */}
-                <div className="px-4 pb-4">
+                    <div className="px-4 pb-4">
+                        {renderPromptComparison()}
                     {/* Initial User Query - Aligned in center */}
                     {userQuery && renderUserQuery(userQuery, 'initial-query')}
 

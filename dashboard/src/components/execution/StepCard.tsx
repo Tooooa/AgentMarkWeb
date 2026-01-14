@@ -264,7 +264,7 @@ const StepCard: React.FC<StepCardProps> = ({ step, isErased, showWatermarkDetail
                 )}
 
                 {/* 4. FINISH RESPONSE Block */}
-                {step.stepType === 'finish' && (
+                {(step.stepType === 'finish' || step.finalAnswer) && (
                     <div className="space-y-1 pl-4 border-l-2 border-emerald-200 ml-5">
                         <div className="flex items-center gap-2 text-xs font-bold text-emerald-500 uppercase tracking-wider mb-2">
                             <Bot size={14} /> FINAL RESPONSE

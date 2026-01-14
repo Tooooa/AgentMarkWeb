@@ -41,6 +41,7 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [steps, setSteps] = useState<Step[]>([]);
     const [promptTraceText, setPromptTraceText] = useState('');
+    const [baselinePromptTraceText, setBaselinePromptTraceText] = useState('');
     const [promptUserInput, setPromptUserInput] = useState('');
     const [historyScenarios, setHistoryScenarios] = useState<Trajectory[]>([]);
     const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
@@ -104,6 +105,9 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
             setEvaluationResult(null);
             setIsEvaluationModalOpen(false);
         }
+        if (baselinePromptTraceText) {
+            setBaselinePromptTraceText('');
+        }
         try {
             let sid = sessionId || await startSession();
             let res;
@@ -115,6 +119,7 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
                     setSessionId(null);
                     setSteps([]);
                     setPromptTraceText('');
+                    setBaselinePromptTraceText('');
                     setSelectedHistoryId(null);
                     setEvaluationResult(null);
                     setIsEvaluationModalOpen(false);
@@ -131,12 +136,18 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
             if (promptTrace) {
                 setPromptTraceText(formatPromptTrace(promptTrace));
             }
+            const baseTrace = res.baselinePromptTrace;
+            if (baseTrace) {
+                setBaselinePromptTraceText(formatPromptTrace(baseTrace));
+            } else {
+                setBaselinePromptTraceText('');
+            }
         } catch (e) {
             console.error(e);
         } finally {
             setIsSending(false);
         }
-    }, [apiKey, isSending, sessionId, startSession, formatPromptTrace, evaluationResult]);
+    }, [apiKey, isSending, sessionId, startSession, formatPromptTrace, evaluationResult, baselinePromptTraceText]);
 
     useEffect(() => {
         if (initialInput) {
@@ -160,6 +171,7 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
         setSessionId(null);
         setSteps([]);
         setPromptTraceText('');
+        setBaselinePromptTraceText('');
         setPromptUserInput('');
         setSelectedHistoryId(null);
         setEvaluationResult(null);
@@ -200,13 +212,13 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
 
     const leftPanel = (
         <div className="flex flex-col gap-6 h-full text-slate-900">
-            <div className="rounded-2xl bg-white/85 border border-amber-100/80 shadow-sm p-1 flex items-center gap-1">
+            <div className="rounded-2xl bg-white/85 border border-indigo-100/80 shadow-sm p-1 flex items-center gap-1">
                 <button
                     onClick={() => setIsComparisonMode(false)}
                     className={`flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all ${
                         !isComparisonMode
-                            ? 'bg-gradient-to-r from-amber-500 via-rose-500 to-emerald-500 text-white shadow'
-                            : 'text-slate-500 hover:bg-amber-50'
+                            ? 'bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 text-white shadow shadow-blue-200/60'
+                            : 'text-slate-500 hover:bg-sky-50'
                     }`}
                 >
                     {locale === 'zh' ? '标准' : 'Standard'}
@@ -215,8 +227,8 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
                     onClick={() => setIsComparisonMode(true)}
                     className={`flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
                         isComparisonMode
-                            ? 'bg-gradient-to-r from-emerald-500 to-sky-500 text-white shadow'
-                            : 'text-slate-500 hover:bg-emerald-50'
+                            ? 'bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-500 text-white shadow shadow-cyan-200/60'
+                            : 'text-slate-500 hover:bg-cyan-50'
                     }`}
                 >
                     <Columns size={12} />
@@ -231,7 +243,7 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
                         className={`w-full py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm ${
                             isEvaluating
                                 ? 'bg-amber-50 text-amber-500 cursor-wait'
-                                : 'bg-gradient-to-r from-amber-500 via-rose-500 to-emerald-500 text-white shadow-amber-200/60 hover:shadow-emerald-200/60'
+                                : 'bg-gradient-to-r from-yellow-400 via-amber-500 to-yellow-500 text-white shadow-yellow-200/60 hover:shadow-amber-200/60'
                         }`}
                     >
                         {isEvaluating ? (
@@ -272,7 +284,7 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
             )}
             <button
                 onClick={handleNewChat}
-                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-rose-500 to-emerald-500 text-white font-semibold shadow-lg shadow-amber-500/30 hover:shadow-emerald-500/30 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 tracking-wide group"
+                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-yellow-400 via-amber-500 to-yellow-500 text-white font-semibold shadow-lg shadow-yellow-500/30 hover:shadow-amber-500/40 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 tracking-wide group"
             >
                 <PlusCircle size={18} className="text-white/90 group-hover:text-white" />
                 {locale === 'zh' ? '新对话' : 'New Chat'}
@@ -491,6 +503,8 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
                             scenarioId={sessionId || undefined}
                             userQuery={promptUserInput}
                             evaluationResult={evaluationResult}
+                            baselinePromptText={baselinePromptTraceText}
+                            watermarkedPromptText={promptTraceText}
                         />
                     ) : (
                         <FlowFeed
