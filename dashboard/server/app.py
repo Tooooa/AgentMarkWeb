@@ -13,6 +13,11 @@ if "no_proxy" in os.environ:
     _sanitized = [p for p in _proxies if p.strip() != "::1"]
     os.environ["no_proxy"] = ",".join(_sanitized)
 
+# Ensure localhost is bypassed
+_current_no_proxy = os.environ.get("no_proxy", "")
+if "127.0.0.1" not in _current_no_proxy:
+     os.environ["no_proxy"] = _current_no_proxy + ",localhost,127.0.0.1,0.0.0.0"
+
 import asyncio
 import numpy as np
 from pathlib import Path
@@ -597,15 +602,19 @@ def _resolve_base_model(requested_model: str) -> str:
 
 
 def _build_proxy_client(api_key: Optional[str]) -> OpenAI:
+    # Prioritize Env Var over provided key (from frontend)
+    real_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY") or api_key or "anything"
     return OpenAI(
-        api_key=api_key or os.getenv("OPENAI_API_KEY") or "anything",
+        api_key=real_key,
         base_url=_get_proxy_base(),
     )
 
 
 def _build_base_llm_client(api_key: Optional[str]) -> OpenAI:
+    # Prioritize Env Var over provided key
+    real_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY") or api_key or "anything"
     return OpenAI(
-        api_key=api_key or os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY") or "anything",
+        api_key=real_key,
         base_url=_get_base_llm_base(),
     )
 

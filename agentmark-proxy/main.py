@@ -1,5 +1,10 @@
 
 import os
+# Ensure localhost is bypassed for internal calls
+_current_no_proxy = os.environ.get("no_proxy", "")
+if "127.0.0.1" not in _current_no_proxy:
+     os.environ["no_proxy"] = _current_no_proxy + ",localhost,127.0.0.1,0.0.0.0"
+
 import json
 import httpx
 import traceback
@@ -128,8 +133,11 @@ async def forward_request(body: dict, auth_header: str = None):
         return JSONResponse(status_code=502, content={"error": f"Upstream failed: {str(e)}"})
 
 async def call_upstream(body: dict, auth_header: str = None) -> dict:
-    # Prefer passed auth_header, fallback to env var
-    token = auth_header or f"Bearer {UPSTREAM_API_KEY}"
+    # Prefer env var, fallback to passed auth_header
+    if UPSTREAM_API_KEY:
+        token = f"Bearer {UPSTREAM_API_KEY}"
+    else:
+        token = auth_header or f"Bearer {UPSTREAM_API_KEY}"
     
     headers = {
         "Authorization": token,
