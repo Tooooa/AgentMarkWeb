@@ -1,0 +1,50 @@
+\documentclass[tikz,border=6pt]{standalone}
+\usepackage{ctex}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+%
+\begin{document}
+\begin{tikzpicture}[
+  font=\sffamily\small,
+  box/.style={draw=black, rounded corners=2pt, fill=white, align=center, minimum width=3.3cm, minimum height=0.95cm, inner sep=6pt},
+  group/.style={draw=black, rounded corners=3pt, fill=none, inner sep=10pt},
+  arrow/.style={-Latex, draw=black, line width=0.85pt},
+  audit/.style={-Latex, draw=black, line width=0.75pt, densely dashed}
+]
+%
+% inside extension
+\node[box] (i) {Interceptor\\fetch、XHR、SSE};
+\node[box, right=14mm of i] (r) {Policy Router\\白名单、灰度、绕过};
+\node[box, right=14mm of r] (sm) {Session Manager\\session\_id、step\_id、context};
+\node[box, right=14mm of sm] (inj) {Injection Engine\\system 与 agentmark};
+\node[box, right=14mm of inj] (out) {Forwarder\\转发到 Proxy 或直连};
+%
+\node[box, below=15mm of i] (buf) {Local Buffer\\IndexedDB、WAL};
+\node[box, right=14mm of buf] (up) {Uploader\\批量、压缩、重试};
+\node[box, right=14mm of up] (priv) {Privacy Guard\\脱敏、摘要、哈希};
+%
+\begin{pgfonlayer}{background}
+  \node[group, fit=(i)(r)(sm)(inj)(out)(buf)(up)(priv)] (g) {};
+\end{pgfonlayer}
+\node[anchor=south west, font=\bfseries] at (g.north west) {Chrome 插件内部组件};
+%
+% outside
+\node[box, right=18mm of out] (px) {AgentMark Proxy};
+\node[box, above=11mm of px] (llm) {LLM API};
+\node[box, below=11mm of px] (audit) {Audit API\\Dashboard 后端};
+%
+% arrows
+\draw[arrow] (i) -- (r);
+\draw[arrow] (r) -- (sm);
+\draw[arrow] (sm) -- (inj);
+\draw[arrow] (inj) -- (out);
+\draw[arrow] (out.east) -- (px.west);
+\draw[arrow] (out.north east) to[bend left=14] (llm.west);
+%
+\draw[audit] (i) -- (buf);
+\draw[audit] (buf) -- (up);
+\draw[audit] (up) -- (priv);
+\draw[audit] (priv.east) -- (audit.west);
+%
+\end{tikzpicture}
+\end{document}

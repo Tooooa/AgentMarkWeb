@@ -1,0 +1,41 @@
+\documentclass[tikz,border=6pt]{standalone}
+\usepackage{ctex}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric}
+%
+\begin{document}
+\begin{tikzpicture}[
+  font=\sffamily\small,
+  box/.style={draw=black, rounded corners=2pt, fill=white, align=center, minimum width=5.2cm, minimum height=0.95cm, inner sep=6pt},
+  decision/.style={draw=black, diamond, aspect=2.1, fill=white, align=center, inner sep=1pt, minimum width=2.9cm},
+  arrow/.style={-Latex, draw=black, line width=0.85pt}
+]
+%
+\node[box] (a) {接收日志流\\$\hat{b}_t$、$P_t$、$Context_t$、工具调用等};
+\node[box, below=10mm of a] (b) {日志清洗与规范化\\去重、补齐步骤编号、排序};
+\node[box, below=10mm of b] (c) {构造观测子集 I\\处理丢包、截断};
+\node[box, below=10mm of c] (d) {逐步解码\\得到 $\hat{m}_t$};
+\node[box, below=10mm of d] (e) {鲁棒聚合解码\\恢复 $\hat{m}$};
+\node[box, below=10mm of e] (f) {一致性与统计检验\\显著性、阈值、误报控制};
+%
+\node[decision, below=12mm of f] (g) {通过};
+\node[box, left=18mm of g] (h) {归因与审计结论\\归属方标识、部署标识、时间线};
+\node[box, right=18mm of g] (i) {进入人工复核\\标记未验证或疑似篡改};
+\node[box, below=12mm of g] (j) {攻击链还原\\规划行为、执行动作、外部影响};
+\node[box, below=10mm of j] (k) {Dashboard 可视化\\轨迹回放、图谱、告警};
+%
+\draw[arrow] (a) -- (b);
+\draw[arrow] (b) -- (c);
+\draw[arrow] (c) -- (d);
+\draw[arrow] (d) -- (e);
+\draw[arrow] (e) -- (f);
+\draw[arrow] (f) -- (g);
+%
+\draw[arrow] (g) -- node[above, font=\scriptsize] {是} (h);
+\draw[arrow] (g) -- node[above, font=\scriptsize] {否} (i);
+\draw[arrow] (h) |- (j);
+\draw[arrow] (i) |- (j);
+\draw[arrow] (j) -- (k);
+%
+\end{tikzpicture}
+\end{document}
