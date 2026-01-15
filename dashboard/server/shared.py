@@ -53,7 +53,7 @@ def _resolve_api_key(request_api_key: Optional[str]) -> str:
     )
 
 def _get_proxy_base() -> str:
-    return "http://0.0.0.0:8001/v1"
+    return "http://127.0.0.1:8001/v1"
 
 def _get_base_llm_base() -> str:
     return "https://api.deepseek.com"

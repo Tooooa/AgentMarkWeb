@@ -430,7 +430,7 @@ async def add_agent_turn(req: AddAgentTurnRequest):
             "messages": messages, 
             "phase": "score", 
             "model": session.model,
-            "fallback_actions": candidates
+            "candidates": candidates # Corrected key
         }
 
         use_swarm = (os.getenv("AGENTMARK_USE_SWARM") or "1").strip().lower() not in {"0", "false", "no"}
@@ -465,9 +465,15 @@ async def add_agent_turn(req: AddAgentTurnRequest):
                     {"name": "get_movie_summary", "description": "Get movie summary.", "arguments": {"title": "string"}},
                 ]
                 
-                # Initialize Adapter
+                # Initialize Adapter - Use DIRECT DeepSeek client, NOT proxy
+                # Fake response generation should NOT go through watermark proxy
+                from openai import OpenAI as DirectOpenAI
+                direct_client = DirectOpenAI(
+                    api_key=req.apiKey or session.api_key,
+                    base_url="https://api.deepseek.com"
+                )
                 from agentmark.environments.toolbench.adapter import ToolBenchAdapter
-                adapter = ToolBenchAdapter(TOOL_DATA_ROOT, client=base_client) # Adapter can use base client
+                adapter = ToolBenchAdapter(TOOL_DATA_ROOT, client=direct_client) # Direct to DeepSeek
                 
                 loop = asyncio.get_running_loop()
                 funcs = _create_dynamic_swarm_tools(
@@ -491,6 +497,7 @@ async def add_agent_turn(req: AddAgentTurnRequest):
                 
                 # Run Swarm
                 # Swarm's run returns the updated conversation history (including input messages)
+                # max_turns limits tool call iterations to prevent infinite loops
                 response = swarm_client.run(
                     agent=ephemeral_agent,
                     messages=[{"role": "user", "content": req.message.strip()}],
@@ -498,7 +505,8 @@ async def add_agent_turn(req: AddAgentTurnRequest):
                     model_override=model_name,
                     stream=False,
                     debug=True,
-                    execute_tools=True
+                    execute_tools=True,
+                    max_turns=5  # Limit to 5 tool call iterations
                 )
                 
                 # --- Recover Prompt Trace & Watermark from the Wrapper ---
