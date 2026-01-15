@@ -1131,8 +1131,9 @@ async def step_session(req: StepRequest):
             return final_data, None, 0, shared_payload
 
 
+        # Swarm Native Execution (only for baseline when enabled)
+        if use_swarm_baseline and agent_state.role == "baseline" and not use_shared_thought:
             try:
-                # Swarm Native Execution (Threaded for Sync Client)
                 from swarm import Swarm, Agent
                 
                 tool_summaries = agent_state.episode["tool_summaries"]
@@ -1226,7 +1227,7 @@ async def step_session(req: StepRequest):
                     for msg in new_messages:
                         role = msg.get("role")
                         content = msg.get("content") or ""
-                        if content:
+                        if role == "assistant" and content:
                             full_text_for_token_estimate += content
                         
                         if role == "assistant":
@@ -1257,7 +1258,7 @@ async def step_session(req: StepRequest):
                                         "final_answer": "",
                                         "distribution": [],
                                         "stepIndex": agent_state.step_count, # Current index
-                                        "metrics": {"latency": 0.1, "tokens": 0.0}
+                                        "metrics": {"latency": 0.1, "tokens": (len(content) / 4 if content else 0.0)}
                                     }
                                     loop.call_soon_threadsafe(
                                         output_queue.put_nowait,
