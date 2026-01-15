@@ -199,10 +199,10 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
                 (locale === 'zh'
                     ? `评估失败: ${errorMsg}`
                     : `Evaluation failed: ${errorMsg}`) +
-                    '\n\n' +
-                    (locale === 'zh'
-                        ? '请确认后端运行正常且已有对话步骤。'
-                        : 'Please ensure the backend is running and there are steps to evaluate.')
+                '\n\n' +
+                (locale === 'zh'
+                    ? '请确认后端运行正常且已有对话步骤。'
+                    : 'Please ensure the backend is running and there are steps to evaluate.')
             );
             setIsEvaluationModalOpen(false);
         } finally {
@@ -215,21 +215,19 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
             <div className="rounded-2xl bg-white/85 border border-amber-100/80 shadow-sm p-1 flex items-center gap-1">
                 <button
                     onClick={() => setIsComparisonMode(false)}
-                    className={`flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all ${
-                        !isComparisonMode
+                    className={`flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all ${!isComparisonMode
                             ? 'bg-amber-100 text-amber-700 shadow shadow-amber-200/60'
                             : 'text-slate-500 hover:bg-amber-50'
-                    }`}
+                        }`}
                 >
                     {locale === 'zh' ? '标准' : 'Standard'}
                 </button>
                 <button
                     onClick={() => setIsComparisonMode(true)}
-                    className={`flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
-                        isComparisonMode
+                    className={`flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${isComparisonMode
                             ? 'bg-amber-100 text-amber-700 shadow shadow-amber-200/60'
                             : 'text-slate-500 hover:bg-amber-50'
-                    }`}
+                        }`}
                 >
                     <Columns size={12} />
                     {locale === 'zh' ? '对比' : 'Compare'}
@@ -240,11 +238,10 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
                     <button
                         onClick={handleEvaluate}
                         disabled={isEvaluating}
-                        className={`w-full py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm ${
-                            isEvaluating
+                        className={`w-full py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm ${isEvaluating
                                 ? 'bg-amber-50 text-amber-500 cursor-wait'
                                 : 'bg-amber-100 text-amber-700 shadow-amber-200/60 hover:bg-amber-200'
-                        }`}
+                            }`}
                     >
                         {isEvaluating ? (
                             <>
@@ -338,11 +335,10 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
                                 <div
                                     key={s.id}
                                     onClick={() => setSelectedHistoryId(s.id)}
-                                    className={`w-full text-left p-3 rounded-lg text-sm transition-all group relative cursor-pointer ${
-                                        isActive
+                                    className={`w-full text-left p-3 rounded-lg text-sm transition-all group relative cursor-pointer ${isActive
                                             ? 'bg-gradient-to-r from-amber-50 via-white to-emerald-50 text-amber-800 font-semibold border-l-4 border-amber-400 shadow-sm'
                                             : 'hover:bg-amber-50/60 text-slate-700 hover:text-slate-900'
-                                    }`}
+                                        }`}
                                 >
                                     <div className="flex items-center justify-between gap-2">
                                         <div className="line-clamp-1 leading-relaxed flex-1">

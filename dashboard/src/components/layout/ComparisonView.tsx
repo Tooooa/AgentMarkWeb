@@ -4,7 +4,7 @@ import { useI18n } from '../../i18n/I18nContext';
 import StepCard from '../execution/StepCard';
 import type { Step } from '../../data/mockData';
 
-import { Columns, Eye, EyeOff, User } from 'lucide-react';
+import { User } from 'lucide-react';
 
 interface ComparisonViewProps {
     visibleSteps: Step[];
@@ -12,12 +12,12 @@ interface ComparisonViewProps {
     scenarioId?: string;
     evaluationResult?: { model_a_score: number, model_b_score: number, reason: string } | null;
     userQuery?: string;
-    baselinePromptText?: string;
-    watermarkedPromptText?: string;
     evaluationRef?: React.RefObject<HTMLDivElement>;
     utilityMonitorRef?: React.RefObject<HTMLDivElement>;
     chartRef?: React.RefObject<HTMLDivElement>;
     variant?: 'default' | 'add_agent';
+    baselinePromptText?: string;
+    watermarkedPromptText?: string;
 }
 
 // 1221: Segment structure for aligning user questions
@@ -33,12 +33,12 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
     scenarioId,
     evaluationResult,
     userQuery,
-    baselinePromptText,
-    watermarkedPromptText,
     evaluationRef,
     utilityMonitorRef,
     chartRef,
-    variant = 'default'
+    variant = 'default',
+    baselinePromptText,
+    watermarkedPromptText
 }) => {
     const isAddAgent = variant === 'add_agent';
     const { locale } = useI18n();
@@ -118,18 +118,16 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
     // Render user query bubble
     const renderUserQuery = (query: string, key: string) => (
         <div key={key} className="col-span-2 my-4">
-            <div className={`w-full bg-gradient-to-r rounded-2xl p-6 ${
-                isAddAgent 
-                    ? 'from-amber-50/50 to-yellow-50/50 border border-amber-100' 
+            <div className={`w-full bg-gradient-to-r rounded-2xl p-6 ${isAddAgent
+                    ? 'from-amber-50/50 to-yellow-50/50 border border-amber-100'
                     : 'from-indigo-50/50 to-violet-50/50 border border-indigo-100'
-            }`}>
+                }`}>
                 <div className="flex gap-3 max-w-[600px] mx-auto">
                     <div className="flex-1">
                         <div className="bg-white border border-slate-200 rounded-2xl p-5 text-sm shadow-sm flex items-center gap-4">
                             <div className="flex-shrink-0">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                                    isAddAgent ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600'
-                                }`}>
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isAddAgent ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600'
+                                    }`}>
                                     <User size={16} />
                                 </div>
                             </div>
@@ -159,14 +157,12 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
                                 {baselinePromptText || '—'}
                             </pre>
                         </div>
-                        <div className={`rounded-xl p-4 ${
-                            isAddAgent 
-                                ? 'bg-amber-50/70 border border-amber-100' 
+                        <div className={`rounded-xl p-4 ${isAddAgent
+                                ? 'bg-amber-50/70 border border-amber-100'
                                 : 'bg-indigo-50/70 border border-indigo-100'
-                        }`}>
-                            <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${
-                                isAddAgent ? 'text-amber-500' : 'text-indigo-400'
-                            }`}>Watermarked Prompt</p>
+                            }`}>
+                            <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isAddAgent ? 'text-amber-500' : 'text-indigo-400'
+                                }`}>Watermarked Prompt</p>
                             <pre className="text-xs text-slate-600 whitespace-pre-wrap break-words max-h-56 overflow-auto">
                                 {watermarkedPromptText || '—'}
                             </pre>
@@ -191,25 +187,23 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
                         <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
                             <span className="font-bold text-slate-600 text-sm">{locale === 'zh' ? '无水印Agent' : 'Original (Base)'}</span>
                         </div>
-                        <div className={`p-3 rounded-xl shadow-sm ${
-                            isAddAgent 
-                                ? 'bg-amber-50 border border-amber-200' 
+                        <div className={`p-3 rounded-xl shadow-sm ${isAddAgent
+                                ? 'bg-amber-50 border border-amber-200'
                                 : 'bg-indigo-50 border border-indigo-200'
-                        }`}>
-                            <span className={`font-bold text-sm ${
-                                isAddAgent ? 'text-amber-700' : 'text-indigo-700'
-                            }`}>{locale === 'zh' ? '有水印Agent' : 'Ours (Watermarked)'}</span>
+                            }`}>
+                            <span className={`font-bold text-sm ${isAddAgent ? 'text-amber-700' : 'text-indigo-700'
+                                }`}>{locale === 'zh' ? '有水印Agent' : 'Ours (Watermarked)'}</span>
                         </div>
                     </div>
                 </div>
 
                 {/* Content area with padding */}
                 <div className="px-4 pb-4">
-                    {renderPromptComparison()}
                     {/* Initial User Query - Aligned in center */}
                     {userQuery && renderUserQuery(userQuery, 'initial-query')}
 
                     {/* Render segments */}
+                    {renderPromptComparison()}
                     {segments.map((segment, segIndex) => {
                         // 计算当前 segment 之前的累计步骤数
                         const prevBaselineCount = segments.slice(0, segIndex).reduce((acc, s) => acc + s.baselineSteps.length, 0);
@@ -241,9 +235,8 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
                                     </div>
 
                                     {/* Right: Watermarked steps */}
-                                    <div ref={segIndex === 0 ? chartRef : undefined} className={`space-y-4 p-2 bg-white rounded-xl border ${
-                                        isAddAgent ? 'border-amber-100' : 'border-indigo-100'
-                                    }`}>
+                                    <div ref={segIndex === 0 ? chartRef : undefined} className={`space-y-4 p-2 bg-white rounded-xl border ${isAddAgent ? 'border-amber-100' : 'border-indigo-100'
+                                        }`}>
                                         {segment.watermarkedSteps.length > 0 ? (
                                             segment.watermarkedSteps.map((step, stepIdx) => (
                                                 <StepCard
