@@ -262,6 +262,7 @@ Open Terminal 2:
 ```bash
 cd AgentMark
 conda activate AgentMark
+export AGENTMARK_BASELINE_USE_SWARM=1
 python dashboard/server/app.py
 ```
 
