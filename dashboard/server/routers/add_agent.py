@@ -6,9 +6,10 @@ import asyncio
 import uuid
 from typing import Dict, List, Optional, Any
 from fastapi import APIRouter, HTTPException, Body
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from openai import OpenAI, AsyncOpenAI
-from agentmark.sdk.prompt_adapter import get_prompt_instruction
+from agentmark.sdk.prompt_adapter import get_prompt_instruction, extract_json_payload
 
 # Import shared utilities
 from dashboard.server.shared import (
@@ -259,6 +260,54 @@ def _get_add_agent_candidates() -> List[str]:
             candidates.append(name)
     return candidates
 
+def _maybe_parse_agentmark_payload(text: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not isinstance(text, str):
+        return None
+    stripped = text.strip()
+    if not stripped:
+        return None
+
+    try:
+        payload = extract_json_payload(stripped)
+    except Exception:
+        return None
+
+    if not isinstance(payload, dict) or not payload:
+        return None
+
+    if any(key in payload for key in ("action_weights", "action_probs", "scores", "action_args", "thought")):
+        return payload
+    return None
+
+def _payload_to_distribution(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    weights = payload.get("action_weights") or payload.get("action_probs") or payload.get("scores")
+    if not isinstance(weights, dict):
+        return []
+    distribution: List[Dict[str, Any]] = []
+    for name, raw_val in weights.items():
+        try:
+            prob = float(raw_val)
+        except Exception:
+            continue
+        distribution.append({"name": str(name), "prob": prob, "isSelected": False})
+    return distribution
+
+def _choose_action_from_payload(payload: Dict[str, Any], distribution: List[Dict[str, Any]]) -> str:
+    direct = payload.get("action") or payload.get("tool")
+    if direct:
+        return str(direct)
+    if not distribution:
+        return ""
+    return max(distribution, key=lambda item: float(item.get("prob") or 0.0)).get("name") or ""
+
+def _extract_action_args_from_payload(payload: Dict[str, Any], action: str) -> Dict[str, Any]:
+    raw_args = payload.get("action_args")
+    if not isinstance(raw_args, dict):
+        return {}
+    if action and action in raw_args and isinstance(raw_args.get(action), dict):
+        return raw_args.get(action) or {}
+    return raw_args
+
 def _build_add_agent_scoring_messages(user_message: str) -> List[Dict[str, str]]:
     instr = get_prompt_instruction()
     messages: List[Dict[str, str]] = [
@@ -297,6 +346,73 @@ def _build_add_agent_scoring_messages(user_message: str) -> List[Dict[str, str]]
     injected.extend(messages)
     injected[0]["content"] += "\\n[AgentMark mode=tools]"
     return injected
+
+def _coerce_to_dict(obj: Any) -> Any:
+    if obj is None:
+        return None
+    if isinstance(obj, (dict, list, str, int, float, bool)):
+        return obj
+    if hasattr(obj, "model_dump"):
+        try:
+            return obj.model_dump()
+        except Exception:
+            pass
+    return getattr(obj, "__dict__", str(obj))
+
+def _extract_stream_delta(ev: Any) -> Dict[str, Any]:
+    payload = _coerce_to_dict(ev)
+    if not isinstance(payload, dict):
+        return {}
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return {}
+    first = choices[0] if isinstance(choices[0], dict) else {}
+    delta = first.get("delta")
+    return delta if isinstance(delta, dict) else {}
+
+def _extract_partial_thought(buf: str) -> Optional[str]:
+    if not buf:
+        return None
+    lowered = buf.lower()
+    idx = lowered.rfind('"thought"')
+    quote = '"'
+    if idx == -1:
+        idx = lowered.rfind("'thought'")
+        quote = "'"
+    if idx == -1:
+        return None
+
+    after = buf[idx + len(quote + "thought" + quote):]
+    colon = after.find(":")
+    if colon == -1:
+        return None
+    rest = after[colon + 1:].lstrip()
+    if not rest.startswith(("\"", "'")):
+        return None
+    q = rest[0]
+    rest = rest[1:]
+
+    out = []
+    escaped = False
+    for ch in rest:
+        if escaped:
+            if ch == "n":
+                out.append("\n")
+            elif ch == "t":
+                out.append("\t")
+            else:
+                out.append(ch)
+            escaped = False
+            continue
+        if ch == "\\":
+            escaped = True
+            continue
+        if ch == q:
+            break
+        out.append(ch)
+
+    candidate = "".join(out)
+    return candidate if candidate.strip() else None
 
 def _build_swarm_system_prompt() -> str:
     """Builds the system instructions including the JSON requirement."""
@@ -444,7 +560,14 @@ async def add_agent_turn(req: AddAgentTurnRequest):
         
         if use_swarm:
             try:
-                from swarm import Swarm, Agent
+                try:
+                    from swarm import Swarm, Agent
+                except Exception as swarm_exc:
+                    print(f"[WARN] Swarm import failed, falling back to non-swarm mode: {swarm_exc}")
+                    use_swarm = False
+                    Swarm = None  # type: ignore[assignment]
+                    Agent = None  # type: ignore[assignment]
+                    raise
                 
                 # Create the wrapped client
                 base_client = _build_proxy_client(req.apiKey or session.api_key)
@@ -583,12 +706,16 @@ async def add_agent_turn(req: AddAgentTurnRequest):
                 w_latency = time.time() - w_start
 
             except Exception as exc:
-                print(f"[WARN] AddAgent Swarm bridge failed: {exc}")
-                import traceback
-                traceback.print_exc()
-                raise exc
+                if not use_swarm:
+                    # Continue with non-swarm fallback below
+                    pass
+                else:
+                    print(f"[WARN] AddAgent Swarm bridge failed: {exc}")
+                    import traceback
+                    traceback.print_exc()
+                    raise exc
 
-        else:
+        if not use_swarm:
             # Fallback to single turn legacy
             client = _build_proxy_client(req.apiKey or session.api_key)
             w_completion = client.chat.completions.create(
@@ -632,6 +759,250 @@ async def add_agent_turn(req: AddAgentTurnRequest):
             f.write("\\n")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/turn_stream")
+async def add_agent_turn_stream(req: AddAgentTurnRequest):
+    if req.sessionId not in add_agent_sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session = add_agent_sessions[req.sessionId]
+    session.last_user_message = req.message
+
+    messages = _build_add_agent_scoring_messages(req.message)
+    candidates = _get_add_agent_candidates()
+    agentmark_body = {
+        "messages": messages,
+        "phase": "score",
+        "model": session.model,
+        "candidates": candidates,
+    }
+
+    use_swarm = (os.getenv("AGENTMARK_USE_SWARM") or "1").strip().lower() not in {"0", "false", "no"}
+    model_name = session.model
+
+    async def event_gen():
+        yield json.dumps({"type": "status", "data": {"state": "start"}}) + "\n"
+
+        try:
+            swarm_enabled = use_swarm
+            swarm_import_error = None
+            if swarm_enabled:
+                try:
+                    from swarm import Swarm, Agent
+                except Exception as swarm_exc:
+                    swarm_enabled = False
+                    swarm_import_error = str(swarm_exc)
+                    yield json.dumps({"type": "status", "data": {"state": "swarm_unavailable", "reason": swarm_import_error}}) + "\n"
+
+            if swarm_enabled:
+                base_client = _build_proxy_client(req.apiKey or session.api_key)
+                wrapped_client = AgentMarkSwarmClientWrapper(base_client, agentmark_body)
+                swarm_client = Swarm(client=wrapped_client)
+
+                plugin_tool_defs = [
+                    {"name": "search_web", "description": "Search the web for general queries.", "arguments": {"query": "string"}},
+                    {"name": "get_weather", "description": "Get weather for a location.", "arguments": {"location": "string"}},
+                    {"name": "get_weather_forecast", "description": "Get weather forecast.", "arguments": {"location": "string"}},
+                    {"name": "get_air_quality", "description": "Get air quality.", "arguments": {"location": "string"}},
+                    {"name": "send_email", "description": "Send an email.", "arguments": {"recipient": "string", "subject": "string", "body": "string"}},
+                    {"name": "send_sms", "description": "Send an SMS.", "arguments": {"phone_number": "string", "message": "string"}},
+                    {"name": "get_top_rated_movies", "description": "Get top rated movies.", "arguments": {"limit": "integer"}},
+                    {"name": "search_movies_by_genre", "description": "Search movies by genre.", "arguments": {"genre": "string"}},
+                    {"name": "get_movie_summary", "description": "Get movie summary.", "arguments": {"title": "string"}},
+                ]
+
+                from openai import OpenAI as DirectOpenAI
+                direct_client = DirectOpenAI(
+                    api_key=req.apiKey or session.api_key,
+                    base_url="https://api.deepseek.com",
+                )
+                from agentmark.environments.toolbench.adapter import ToolBenchAdapter
+                adapter = ToolBenchAdapter(TOOL_DATA_ROOT, client=direct_client)
+
+                loop = asyncio.get_running_loop()
+                funcs = _create_dynamic_swarm_tools(
+                    plugin_tool_defs,
+                    adapter,
+                    {"query": req.message},
+                    None,
+                    loop,
+                    "AddAgent",
+                )
+
+                system_instructions = _build_swarm_system_prompt()
+                ephemeral_agent = Agent(
+                    name="AddAgent",
+                    model=model_name,
+                    instructions=system_instructions,
+                    functions=funcs,
+                )
+
+                partial_buf = ""
+                last_sent_thought = None
+                last_tool_name = None
+                last_tool_args = None
+                final_response = None
+
+                stream = swarm_client.run(
+                    agent=ephemeral_agent,
+                    messages=[{"role": "user", "content": req.message.strip()}],
+                    context_variables={},
+                    model_override=model_name,
+                    stream=True,
+                    debug=True,
+                    execute_tools=True,
+                    max_turns=5,
+                )
+
+                for ev in stream:
+                    payload = _coerce_to_dict(ev)
+                    if isinstance(payload, dict) and "response" in payload:
+                        final_response = payload.get("response")
+                        continue
+
+                    if isinstance(payload, dict) and isinstance(payload.get("delim"), str):
+                        yield json.dumps({"type": "delim", "data": payload.get("delim")}) + "\n"
+                        continue
+
+                    delta = _extract_stream_delta(payload)
+                    if delta:
+                        content_delta = delta.get("content")
+                        if isinstance(content_delta, str) and content_delta:
+                            partial_buf += content_delta
+                            thought = _extract_partial_thought(partial_buf) or _extract_thought_from_raw_output(partial_buf)
+                            if thought and thought != last_sent_thought:
+                                last_sent_thought = thought
+                                yield json.dumps({"type": "thought_delta", "data": {"text": thought}}) + "\n"
+
+                        tool_calls = delta.get("tool_calls")
+                        if isinstance(tool_calls, list) and tool_calls:
+                            first = tool_calls[0] if isinstance(tool_calls[0], dict) else {}
+                            fn = first.get("function") if isinstance(first, dict) else None
+                            fn = fn if isinstance(fn, dict) else {}
+                            tool_name = fn.get("name")
+                            tool_args = fn.get("arguments")
+                            if tool_name and (tool_name != last_tool_name or tool_args != last_tool_args):
+                                last_tool_name = tool_name
+                                last_tool_args = tool_args
+                                yield json.dumps({"type": "tool_call", "data": {"name": tool_name, "arguments": tool_args}}) + "\n"
+
+                response_obj = final_response
+                response_dict = _coerce_to_dict(response_obj)
+                response_messages = None
+                if hasattr(response_obj, "messages"):
+                    response_messages = getattr(response_obj, "messages", None)
+                if response_messages is None and isinstance(response_dict, dict):
+                    response_messages = response_dict.get("messages")
+
+                steps: List[Dict[str, Any]] = []
+                if isinstance(response_messages, list):
+                    new_messages = response_messages[1:]
+                    i = 0
+                    while i < len(new_messages):
+                        msg = new_messages[i] if isinstance(new_messages[i], dict) else {}
+                        role = msg.get("role")
+                        content = msg.get("content")
+                        tool_calls = msg.get("tool_calls")
+
+                        if role == "assistant":
+                            session.step_count += 1
+
+                            observation = None
+                            if tool_calls:
+                                next_msg_idx = i + 1
+                                if next_msg_idx < len(new_messages):
+                                    next_msg = new_messages[next_msg_idx] if isinstance(new_messages[next_msg_idx], dict) else {}
+                                    if next_msg.get("role") == "tool":
+                                        observation = next_msg.get("content")
+                                        i += 1
+
+                            watermark_data = {}
+                            step_data = _build_add_agent_step(
+                                watermark=watermark_data,
+                                step_index=session.step_count,
+                                completion_content=content,
+                                completion_tool_calls=tool_calls,
+                                observation=observation,
+                                latency=0.0,
+                                tokens=_extract_tokens_used(msg),
+                            )
+                            steps.append(step_data)
+                        i += 1
+
+                yield json.dumps({
+                    "type": "result",
+                    "data": {
+                        "steps": steps,
+                        "step": steps[-1] if steps else None,
+                        "promptTrace": None,
+                        "baselinePromptTrace": None,
+                    },
+                }) + "\n"
+            else:
+                # Non-swarm: best-effort streaming of the LLM content. We still emit thought/tool deltas,
+                # then emit a final Step built from the accumulated content.
+                client = _build_proxy_client(req.apiKey or session.api_key)
+                partial_buf = ""
+                last_sent_thought = None
+                tool_call_buf: List[Dict[str, Any]] = []
+
+                stream = client.chat.completions.create(
+                    model=model_name,
+                    messages=messages,
+                    tools=ADD_AGENT_TOOLS,
+                    extra_body={"agentmark": agentmark_body},
+                    temperature=0.0,
+                    stream=True,
+                )
+
+                for ev in stream:
+                    payload = _coerce_to_dict(ev)
+                    delta = _extract_stream_delta(payload)
+                    if not delta:
+                        continue
+                    content_delta = delta.get("content")
+                    if isinstance(content_delta, str) and content_delta:
+                        partial_buf += content_delta
+                        thought = _extract_partial_thought(partial_buf) or _extract_thought_from_raw_output(partial_buf)
+                        if thought and thought != last_sent_thought:
+                            last_sent_thought = thought
+                            yield json.dumps({"type": "thought_delta", "data": {"text": thought}}) + "\n"
+
+                    tool_calls = delta.get("tool_calls")
+                    if isinstance(tool_calls, list) and tool_calls:
+                        tool_call_buf = tool_calls
+                        first = tool_calls[0] if isinstance(tool_calls[0], dict) else {}
+                        fn = first.get("function") if isinstance(first, dict) else None
+                        fn = fn if isinstance(fn, dict) else {}
+                        tool_name = fn.get("name")
+                        tool_args = fn.get("arguments")
+                        if tool_name:
+                            yield json.dumps({"type": "tool_call", "data": {"name": tool_name, "arguments": tool_args}}) + "\n"
+
+                session.step_count += 1
+                step_data = _build_add_agent_step(
+                    watermark={},
+                    step_index=session.step_count,
+                    completion_content=partial_buf,
+                    completion_tool_calls=tool_call_buf or None,
+                    observation=None,
+                    latency=0.0,
+                    tokens=0.0,
+                )
+                yield json.dumps({
+                    "type": "result",
+                    "data": {
+                        "steps": [step_data],
+                        "step": step_data,
+                        "promptTrace": None,
+                        "baselinePromptTrace": None,
+                    },
+                }) + "\n"
+
+        except Exception as e:
+            yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+    return StreamingResponse(event_gen(), media_type="application/x-ndjson")
+
 @router.post("/save")
 async def save_add_agent_session(req: SaveAddAgentSessionRequest):
     if req.sessionId not in add_agent_sessions:
@@ -664,6 +1035,12 @@ def _build_add_agent_step(
         )
     action = watermark.get("action") or ""
     action_args = watermark.get("action_args") or {}
+
+    agentmark_payload = _maybe_parse_agentmark_payload(completion_content)
+    if not agentmark_payload:
+        raw_text_candidate = watermark.get("raw_llm_output") or ""
+        agentmark_payload = _maybe_parse_agentmark_payload(raw_text_candidate)
+    is_agentmark_scoring = bool(agentmark_payload)
     
     if completion_tool_calls:
         tc = completion_tool_calls[0]
@@ -680,6 +1057,22 @@ def _build_add_agent_step(
             action_args = json.loads(fn_args) if isinstance(fn_args, str) else fn_args
         except:
             action_args = {"raw_args": fn_args}
+    elif is_agentmark_scoring:
+        parsed_distribution = _payload_to_distribution(agentmark_payload or {})
+        parsed_action = _choose_action_from_payload(agentmark_payload or {}, parsed_distribution)
+        parsed_args = _extract_action_args_from_payload(agentmark_payload or {}, parsed_action)
+
+        if not distribution and parsed_distribution:
+            distribution = parsed_distribution
+
+        if parsed_action:
+            for item in distribution:
+                if item.get("name") == parsed_action:
+                    item["isSelected"] = True
+            action = action or parsed_action
+
+        if parsed_args:
+            action_args = parsed_args
 
     raw_text = watermark.get("raw_llm_output") or ""
     thought = _extract_thought_from_raw_output(raw_text)
@@ -687,17 +1080,31 @@ def _build_add_agent_step(
          thought = _extract_thought_from_raw_output(completion_content)
          
     if not thought:
-        if completion_content and not completion_tool_calls:
-             pass 
-        else:
-             thought = "Thinking..."
+        if completion_tool_calls and isinstance(completion_content, str) and completion_content.strip():
+            candidate = completion_content.strip()
+            if not candidate.startswith("{"):
+                thought = candidate
+        if not thought:
+            if completion_content and not completion_tool_calls:
+                if is_agentmark_scoring:
+                    thought = "Thinking..."
+            else:
+                thought = "Thinking..."
 
     bits_embedded = frontend.get("watermark_meta", {}).get("bits_embedded") or 0
     matrix_rows = [[1] for _ in range(int(bits_embedded))]
     
-    final_answer = (completion_content or "").strip()
-    if not final_answer and raw_text and not completion_tool_calls:
-        final_answer = raw_text.strip()
+    final_answer = ""
+    if is_agentmark_scoring and str(action).strip() == "Finish" and not completion_tool_calls:
+        if isinstance(action_args, dict):
+            final_answer = (action_args.get("final_answer") or action_args.get("answer") or "").strip()
+        elif isinstance(action_args, str):
+            final_answer = action_args.strip()
+
+    if not final_answer and not is_agentmark_scoring and not completion_tool_calls:
+        final_answer = (completion_content or "").strip()
+        if not final_answer and raw_text and not completion_tool_calls:
+            final_answer = raw_text.strip()
     
     has_tool_calls = bool(completion_tool_calls)
     step_type = "tool" if (action or has_tool_calls) else "other"

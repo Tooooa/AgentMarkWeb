@@ -40,6 +40,13 @@ export interface AddAgentTurnResponse {
     watermark?: any;
 }
 
+export interface AddAgentTurnStreamEvent {
+    type: 'status' | 'thought_delta' | 'tool_call' | 'delim' | 'result' | 'error';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data?: any;
+    message?: string;
+}
+
 export interface AddAgentEvaluateResponse {
     model_a_score: number;
     model_b_score: number;
@@ -168,6 +175,47 @@ export const api = {
     ): Promise<AddAgentTurnResponse> => {
         const response = await axios.post(`${API_BASE}/api/add_agent/turn`, { sessionId, message, apiKey });
         return response.data;
+    },
+
+    addAgentTurnStream: async (
+        sessionId: string,
+        message: string,
+        apiKey: string,
+        onChunk: (data: AddAgentTurnStreamEvent) => void
+    ): Promise<void> => {
+        const response = await fetch(`${API_BASE}/api/add_agent/turn_stream`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, message, apiKey })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        if (!response.body) return;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                    const json = JSON.parse(line) as AddAgentTurnStreamEvent;
+                    onChunk(json);
+                } catch (e) {
+                    console.error("Stream parse error", e);
+                }
+            }
+        }
     },
 
     addAgentEvaluate: async (

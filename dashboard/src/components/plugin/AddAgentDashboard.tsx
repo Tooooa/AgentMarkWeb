@@ -93,9 +93,18 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
     const [isEvaluationModalOpen, setIsEvaluationModalOpen] = useState(false);
     const erasedIndices = useMemo(() => new Set<number>(), []);
     const promptInputRef = useRef<HTMLInputElement>(null);
+    const userStepIndexRef = useRef(-1);
+    const revealSeqRef = useRef(0);
+    const revealTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (revealTimeoutRef.current) clearTimeout(revealTimeoutRef.current);
+        };
+    }, []);
     const chartData = useMemo(() => {
-        const data = steps.map((step) => ({
-            step: step.stepIndex,
+        const data = steps.map((step, idx) => ({
+            step: idx,
             tokens: step.metrics?.tokens ?? null,
             latency: step.metrics?.latency ?? null,
             baseTokens: step.baseline?.metrics?.tokens ?? null,
@@ -151,68 +160,117 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
             setBaselinePromptTraceText('');
         }
 
-        // Create a user input step to display in the conversation
+        const userStepIndex = userStepIndexRef.current;
+        userStepIndexRef.current -= 1;
+        const placeholderStepIndex = userStepIndexRef.current;
+        userStepIndexRef.current -= 1;
+
         const userInputStep: Step = {
-            stepIndex: steps.length,
+            stepIndex: userStepIndex,
             thought: content,
             action: 'user_input',
             toolDetails: '',
             distribution: [],
-            watermark: { present: false, confidence: 0 },
+            watermark: { bits: '', matrixRows: [], rankContribution: 0 },
             stepType: 'user_input',
             isHidden: false
         };
 
-        // Add user input step to the conversation
-        setSteps((prev) => [...prev, userInputStep]);
+        const placeholderStep: Step = {
+            stepIndex: placeholderStepIndex,
+            thought: locale === 'zh' ? '思考中...' : 'Thinking...',
+            action: '',
+            toolDetails: '',
+            distribution: [],
+            watermark: { bits: '', matrixRows: [], rankContribution: 0 },
+            stepType: 'other',
+            isHidden: false
+        };
+
+        setSteps((prev) => [...prev, userInputStep, placeholderStep]);
 
         try {
             let sid = sessionId || await startSession();
-            let res;
+
+            revealSeqRef.current += 1;
+            const streamSeq = revealSeqRef.current;
+
+            const applyPlaceholderPatch = (patch: Partial<Step>) => {
+                setSteps((prev) => prev.map((s) => {
+                    if (s.stepIndex !== placeholderStepIndex) return s;
+                    return { ...s, ...patch };
+                }));
+            };
+
             try {
-                res = await api.addAgentTurn(sid, content, apiKey);
+                await api.addAgentTurnStream(sid, content, apiKey, (evt) => {
+                    if (revealSeqRef.current !== streamSeq) return;
+                    if (!evt || typeof evt !== 'object') return;
+
+                    if (evt.type === 'thought_delta') {
+                        const text = evt.data?.text;
+                        if (typeof text === 'string' && text.trim()) {
+                            applyPlaceholderPatch({ thought: text });
+                        }
+                    }
+
+                    if (evt.type === 'tool_call') {
+                        const name = evt.data?.name;
+                        const args = evt.data?.arguments;
+                        if (typeof name === 'string' && name) {
+                            applyPlaceholderPatch({
+                                action: `Call: ${name}`,
+                                toolDetails: typeof args === 'string' ? args : (args ? JSON.stringify(args) : '')
+                            });
+                        }
+                    }
+
+                    if (evt.type === 'error') {
+                        applyPlaceholderPatch({ thought: evt.message || (locale === 'zh' ? '出错了' : 'Error') });
+                    }
+
+                    if (evt.type === 'result') {
+                        const res = evt.data;
+                        const nextSteps = Array.isArray(res?.steps) ? (res.steps as Step[]) : [];
+
+                        setSteps((prev) => {
+                            const withoutPlaceholder = prev.filter((s) => s.stepIndex !== placeholderStepIndex);
+                            return [...withoutPlaceholder, ...nextSteps];
+                        });
+
+                        const promptTrace = res?.promptTrace;
+                        if (promptTrace) {
+                            setPromptTrace(promptTrace);
+                            setPromptTraceText(formatPromptTrace(promptTrace));
+                        } else {
+                            setPromptTrace(null);
+                        }
+                        const baseTrace = res?.baselinePromptTrace;
+                        if (baseTrace) {
+                            setBaselinePromptTrace(baseTrace);
+                            setBaselinePromptTraceText(formatPromptTrace(baseTrace));
+                        } else {
+                            setBaselinePromptTrace(null);
+                            setBaselinePromptTraceText('');
+                        }
+                    }
+                });
             } catch (err: any) {
                 const status = err?.response?.status;
-                if (status === 404) {
-                    setSessionId(null);
-                    setSteps([]);
-                    setPromptTraceText('');
-                    setBaselinePromptTraceText('');
-                    setSelectedHistoryId(null);
-                    setEvaluationResult(null);
-                    setIsEvaluationModalOpen(false);
-                    sid = await startSession();
-                    res = await api.addAgentTurn(sid, content, apiKey);
-                } else {
+                const msg = String(err?.message || '');
+                if (status === 404 || msg.startsWith('HTTP 404')) {
+                    applyPlaceholderPatch({ thought: locale === 'zh' ? '会话已过期，请重试' : 'Session expired, please retry' });
                     throw err;
                 }
-            }
-            if (res.steps && Array.isArray(res.steps)) {
-                setSteps((prev) => [...prev, ...(res.steps as Step[])]);
-            } else if (res.step) {
-                setSteps((prev) => [...prev, res.step as Step]);
-            }
-            const promptTrace = res.promptTrace;
-            if (promptTrace) {
-                setPromptTrace(promptTrace);
-                setPromptTraceText(formatPromptTrace(promptTrace));
-            } else {
-                setPromptTrace(null);
-            }
-            const baseTrace = res.baselinePromptTrace;
-            if (baseTrace) {
-                setBaselinePromptTrace(baseTrace);
-                setBaselinePromptTraceText(formatPromptTrace(baseTrace));
-            } else {
-                setBaselinePromptTrace(null);
-                setBaselinePromptTraceText('');
+                throw err;
             }
         } catch (e) {
             console.error(e);
+            setSteps((prev) => prev.filter((s) => s.stepIndex !== placeholderStepIndex));
         } finally {
             setIsSending(false);
         }
-    }, [apiKey, isSending, sessionId, startSession, formatPromptTrace, evaluationResult, baselinePromptTraceText]);
+    }, [apiKey, isSending, sessionId, startSession, formatPromptTrace, evaluationResult, baselinePromptTraceText, locale]);
 
     useEffect(() => {
         if (initialInput) {
@@ -271,6 +329,12 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
     };
 
     const handleNewChat = () => {
+        revealSeqRef.current += 1;
+        if (revealTimeoutRef.current) {
+            clearTimeout(revealTimeoutRef.current);
+            revealTimeoutRef.current = null;
+        }
+        userStepIndexRef.current = -1;
         setSessionId(null);
         setSteps([]);
         setPromptTraceText('');
@@ -316,6 +380,11 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
     }, [sessionId, steps.length, evaluationResult, locale]);
 
     const handleHistorySelect = (s: Trajectory) => {
+        revealSeqRef.current += 1;
+        if (revealTimeoutRef.current) {
+            clearTimeout(revealTimeoutRef.current);
+            revealTimeoutRef.current = null;
+        }
         setSelectedHistoryId(s.id);
         setSessionId(s.id);
         const stepsWithBaseline = s.steps || [];
