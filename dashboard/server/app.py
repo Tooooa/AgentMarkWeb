@@ -668,6 +668,48 @@ async def init_custom_session(req: CustomInitRequest):
 
 
 
+@app.get("/api/scenarios")
+async def list_scenarios(search: Optional[str] = None, limit: int = 100, type: Optional[str] = None):
+    """List all saved conversations from database with optional search and type filter"""
+    try:
+        scenarios = db.list_conversations(limit=limit, search=search, type_filter=type)
+        return scenarios
+    except Exception as e:
+        print(f"[ERROR] Failed to list scenarios: {e}")
+        return []
+
+
+class SaveScenarioRequest(BaseModel):
+    title: Any  # str or dict
+    data: Dict
+    id: Optional[str] = None  # Optional ID to overwrite
+    type: Optional[str] = "benchmark"  # Default to benchmark
+
+
+@app.post("/api/save_scenario")
+async def save_scenario(req: SaveScenarioRequest):
+    """Save conversation to database"""
+    try:
+        scenario_id = req.id if req.id else str(uuid.uuid4())
+
+        scenario_data = req.data
+        scenario_data["id"] = scenario_id
+        scenario_data["type"] = req.type
+
+        if isinstance(req.title, str):
+            scenario_data["title"] = {"en": req.title, "zh": req.title}
+        else:
+            scenario_data["title"] = req.title
+
+        db.save_conversation(scenario_data)
+
+        print(f"[INFO] Saved scenario {scenario_id} to database")
+        return {"status": "success", "id": scenario_id}
+    except Exception as e:
+        print(f"[ERROR] Save failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.delete("/api/scenarios/clear_all")
 async def clear_all_history():
     """Clear all conversation history from database"""
@@ -1089,8 +1131,9 @@ async def step_session(req: StepRequest):
             return final_data, None, 0, shared_payload
 
 
+        # Swarm Native Execution (only for baseline when enabled)
+        if use_swarm_baseline and agent_state.role == "baseline" and not use_shared_thought:
             try:
-                # Swarm Native Execution (Threaded for Sync Client)
                 from swarm import Swarm, Agent
                 
                 tool_summaries = agent_state.episode["tool_summaries"]
@@ -1179,10 +1222,13 @@ async def step_session(req: StepRequest):
                     # Convert new_messages to our trajectory format
                     final_answer_text = ""
                     done = False
+                    full_text_for_token_estimate = ""
                     
                     for msg in new_messages:
                         role = msg.get("role")
                         content = msg.get("content") or ""
+                        if role == "assistant" and content:
+                            full_text_for_token_estimate += content
                         
                         if role == "assistant":
                             tool_calls = msg.get("tool_calls")
@@ -1212,7 +1258,7 @@ async def step_session(req: StepRequest):
                                         "final_answer": "",
                                         "distribution": [],
                                         "stepIndex": agent_state.step_count, # Current index
-                                        "metrics": {"latency": 0.1, "tokens": 0.0}
+                                        "metrics": {"latency": 0.1, "tokens": (len(content) / 4 if content else 0.0)}
                                     }
                                     loop.call_soon_threadsafe(
                                         output_queue.put_nowait,
@@ -1245,6 +1291,7 @@ async def step_session(req: StepRequest):
                     agent_state.done = done
 
                     step_latency = time.time() - step_start_time
+                    est_tokens = len(full_text_for_token_estimate) / 4 if full_text_for_token_estimate else 0.0
                     
                     final_data = {
                         "agent": agent_state.role,
@@ -1255,7 +1302,7 @@ async def step_session(req: StepRequest):
                         "final_answer": final_answer_text,
                         "distribution": [], # NO BLUE BARS
                         "stepIndex": agent_state.step_count - 1,
-                        "metrics": {"latency": step_latency, "tokens": 0.0},
+                        "metrics": {"latency": step_latency, "tokens": est_tokens},
                     }
                     return final_data, None, 0, None
                 

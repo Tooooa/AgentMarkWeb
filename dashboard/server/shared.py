@@ -117,7 +117,7 @@ def _create_dynamic_swarm_tools(tool_summaries: List[Dict], adapter: Any, task_s
                     "metrics": {"latency": 0.0, "tokens": 0.0}
                 }
                 loop.call_soon_threadsafe(
-                    output_queue.put_nowait,
+                    queue.put_nowait,
                     {
                         "type": "result", 
                         "data": step_data
