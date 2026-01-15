@@ -374,7 +374,7 @@ function AppContent() {
                     erasedIndices={erasedIndices}
                     scenarioId={activeScenario.id}
                     evaluationResult={evaluationResult}
-                    userQuery={customQuery || activeScenario.userQuery}
+                    userQueryLeft={customQuery || activeScenario.userQuery}
                     evaluationRef={evaluationRef}
                     utilityMonitorRef={utilityMonitorRef}
                     chartRef={chartRef}

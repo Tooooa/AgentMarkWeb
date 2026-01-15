@@ -11,7 +11,8 @@ interface ComparisonViewProps {
     erasedIndices: Set<number>;
     scenarioId?: string;
     evaluationResult?: { model_a_score: number, model_b_score: number, reason: string } | null;
-    userQuery?: string;
+    userQueryLeft?: string;
+    userQueryRight?: string;
     promptInstruction?: string;
     evaluationRef?: React.RefObject<HTMLDivElement>;
     utilityMonitorRef?: React.RefObject<HTMLDivElement>;
@@ -31,7 +32,8 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
     erasedIndices,
     scenarioId,
     evaluationResult,
-    userQuery,
+    userQueryLeft,
+    userQueryRight,
     promptInstruction,
     evaluationRef,
     utilityMonitorRef,
@@ -113,8 +115,8 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
         return result;
     }, [visibleSteps]);
 
-    const renderUserQueryPair = (query: string, key: string) => {
-        const rightQuery = promptInstruction ? `${query}\n\n${promptInstruction}` : query;
+    const renderUserQueryPair = (leftQuery: string, rightQuery: string | undefined, key: string) => {
+        const resolvedRight = rightQuery ?? leftQuery;
         return (
         <div key={key} className="col-span-2 my-4">
             <div className="w-full bg-gradient-to-r from-indigo-50/50 to-violet-50/50 border border-indigo-100 rounded-2xl p-6">
@@ -128,7 +130,7 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
                             </div>
                             <div className="flex-1">
                                 <p className="font-bold text-[10px] text-slate-400 mb-1 uppercase tracking-wide">{locale === 'zh' ? '用户提问' : 'User Question'}</p>
-                                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{query}</p>
+                                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{leftQuery}</p>
                             </div>
                         </div>
                     </div>
@@ -141,7 +143,7 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
                             </div>
                             <div className="flex-1">
                                 <p className="font-bold text-[10px] text-slate-400 mb-1 uppercase tracking-wide">{locale === 'zh' ? '用户提问 + 指令' : 'User Question + Instruction'}</p>
-                                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{rightQuery}</p>
+                                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{resolvedRight}</p>
                             </div>
                         </div>
                     </div>
@@ -181,7 +183,7 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
                 {/* Content area with padding */}
                 <div className="px-4 pb-4">
                     {/* Initial User Query - Aligned in center */}
-                    {userQuery && renderUserQueryPair(userQuery, 'initial-query')}
+                    {userQueryLeft && renderUserQueryPair(userQueryLeft, userQueryRight, 'initial-query')}
 
                     {/* Render segments */}
                     {segments.map((segment, segIndex) => {
@@ -238,7 +240,11 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
                                 </div>
 
                                 {/* User Input - Centered and aligned */}
-                                {segment.userInput && renderUserQueryPair(segment.userInput.thought || '', `user-input-${segIndex}`)}
+                                {segment.userInput && renderUserQueryPair(
+                                    segment.userInput.thought || '',
+                                    promptInstruction ? `${segment.userInput.thought || ''}\n\n${promptInstruction}` : undefined,
+                                    `user-input-${segIndex}`
+                                )}
                             </React.Fragment>
                         )
                     })}

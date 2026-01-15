@@ -48,25 +48,19 @@ Requirements:
 - Do NOT output any extra text or code fences.
 - Provide a concise rationale in the thought field (no extra sections).`;
 
-const buildGatewayPromptText = (traceText: string) => {
-    if (!traceText) return '';
-    try {
-        const parsed = JSON.parse(traceText);
-        if (Array.isArray(parsed)) {
-            const filtered = parsed.filter((msg) => {
-                const content = typeof msg?.content === 'string' ? msg.content : '';
-                return content && !content.includes(PROMPT_INSTRUCTION);
-            });
-            if (filtered.length > 0) {
-                return filtered
-                    .map((msg) => `${msg.role}: ${msg.content}`)
-                    .join('\n');
-            }
+const buildGatewayPromptText = (trace: any, fallbackText: string) => {
+    const messages = trace?.scoring_messages || trace?.execution_messages;
+    if (Array.isArray(messages) && messages.length > 0) {
+        const filtered = messages.filter((msg) => {
+            const content = typeof msg?.content === 'string' ? msg.content : '';
+            return content && !content.includes(PROMPT_INSTRUCTION) && !content.includes('[AgentMark mode=tools]');
+        });
+        if (filtered.length > 0) {
+            return filtered.map((msg) => `${msg.role}: ${msg.content}`).join('\n');
         }
-    } catch (err) {
-        // ignore parse errors and fall back to text processing
     }
-    return traceText.replace(PROMPT_INSTRUCTION, '').trim();
+    if (!fallbackText) return '';
+    return fallbackText.replace(PROMPT_INSTRUCTION, '').replace('[AgentMark mode=tools]', '').trim();
 };
 
 const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
@@ -83,6 +77,8 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
     const [steps, setSteps] = useState<Step[]>([]);
     const [promptTraceText, setPromptTraceText] = useState('');
     const [baselinePromptTraceText, setBaselinePromptTraceText] = useState('');
+    const [promptTrace, setPromptTrace] = useState<any>(null);
+    const [baselinePromptTrace, setBaselinePromptTrace] = useState<any>(null);
     const [promptUserInput, setPromptUserInput] = useState('');
     const [historyScenarios, setHistoryScenarios] = useState<Trajectory[]>([]);
     const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
@@ -118,9 +114,9 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
     }, [steps]);
 
     const gatewayPromptText = useMemo(() => {
-        if (!promptTraceText) return '';
-        return buildGatewayPromptText(promptTraceText);
-    }, [promptTraceText]);
+        if (!promptTrace && !promptTraceText) return '';
+        return buildGatewayPromptText(promptTrace, promptTraceText);
+    }, [promptTrace, promptTraceText]);
 
     const formatPromptTrace = useCallback((trace: any) => {
         if (!trace) return '';
@@ -182,12 +178,17 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
             }
             const promptTrace = res.promptTrace;
             if (promptTrace) {
+                setPromptTrace(promptTrace);
                 setPromptTraceText(formatPromptTrace(promptTrace));
+            } else {
+                setPromptTrace(null);
             }
             const baseTrace = res.baselinePromptTrace;
             if (baseTrace) {
+                setBaselinePromptTrace(baseTrace);
                 setBaselinePromptTraceText(formatPromptTrace(baseTrace));
             } else {
+                setBaselinePromptTrace(null);
                 setBaselinePromptTraceText('');
             }
         } catch (e) {
@@ -258,6 +259,8 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
         setSteps([]);
         setPromptTraceText('');
         setBaselinePromptTraceText('');
+        setPromptTrace(null);
+        setBaselinePromptTrace(null);
         setPromptUserInput('');
         setSelectedHistoryId(null);
         setEvaluationResult(null);
@@ -587,7 +590,8 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
                             visibleSteps={steps}
                             erasedIndices={erasedIndices}
                             scenarioId={sessionId || undefined}
-                            userQuery={gatewayPromptText || promptUserInput}
+                            userQueryLeft={gatewayPromptText || promptUserInput}
+                            userQueryRight={promptUserInput ? `${promptUserInput}\n\n${PROMPT_INSTRUCTION}` : PROMPT_INSTRUCTION}
                             promptInstruction={PROMPT_INSTRUCTION}
                             evaluationResult={evaluationResult}
                             variant="add_agent"
