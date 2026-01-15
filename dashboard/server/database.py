@@ -178,6 +178,21 @@ class ConversationDB:
         
         return count
     
+    def clear_conversations_by_type(self, scenario_type: str) -> int:
+        """Clear conversation history by type"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT COUNT(*) FROM conversations WHERE scenario_type = ?", (scenario_type,))
+        count = cursor.fetchone()[0]
+        
+        cursor.execute("DELETE FROM conversations WHERE scenario_type = ?", (scenario_type,))
+        
+        conn.commit()
+        conn.close()
+        
+        return count
+    
     def toggle_pin(self, conversation_id: str) -> bool:
         """Toggle pin status of a conversation"""
         conn = sqlite3.connect(self.db_path)

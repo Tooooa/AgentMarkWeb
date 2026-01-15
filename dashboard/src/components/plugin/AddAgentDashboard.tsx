@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, Award, Columns, PlusCircle, Save, Search } from 'lucide-react';
+import { Activity, Award, Columns, PlusCircle, Save, Search, Trash2 } from 'lucide-react';
 import {
     CartesianGrid,
     Line,
@@ -13,6 +13,7 @@ import MainLayout from '../layout/MainLayout';
 import ComparisonView from '../layout/ComparisonView';
 import FlowFeed from '../execution/FlowFeed';
 import EvaluationModal from '../execution/EvaluationModal';
+import ConfirmDialog from '../modals/ConfirmDialog';
 import DecoderPanel from '../decoder/DecoderPanel';
 import type { Step, Trajectory } from '../../data/mockData';
 import { api } from '../../services/api';
@@ -91,6 +92,13 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
         reason: string;
     } | null>(null);
     const [isEvaluationModalOpen, setIsEvaluationModalOpen] = useState(false);
+    const [isHistoryViewOpen, setIsHistoryViewOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isBatchMode, setIsBatchMode] = useState(false);
+    const [selectedScenarios, setSelectedScenarios] = useState<Set<string>>(new Set());
+    const [isClearHistoryDialogOpen, setIsClearHistoryDialogOpen] = useState(false);
+    const [isBatchDeleteDialogOpen, setIsBatchDeleteDialogOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const erasedIndices = useMemo(() => new Set<number>(), []);
     const promptInputRef = useRef<HTMLInputElement>(null);
     const chartData = useMemo(() => {
@@ -158,7 +166,7 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
             action: 'user_input',
             toolDetails: '',
             distribution: [],
-            watermark: { present: false, confidence: 0 },
+            watermark: { bits: '', matrixRows: [], rankContribution: 0 },
             stepType: 'user_input',
             isHidden: false
         };
@@ -342,6 +350,73 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
 
         // Reset modal state
         setIsEvaluationModalOpen(false);
+        setIsHistoryViewOpen(false);
+    };
+
+    // Filter scenarios based on search query
+    const filteredScenarios = useMemo(() => {
+        if (!searchQuery.trim()) return historyScenarios;
+        const query = searchQuery.toLowerCase();
+        return historyScenarios.filter(s => {
+            const titleEn = s.title?.en?.toLowerCase() || '';
+            const titleZh = s.title?.zh?.toLowerCase() || '';
+            const userQuery = s.userQuery?.toLowerCase() || '';
+            return titleEn.includes(query) || titleZh.includes(query) || userQuery.includes(query);
+        });
+    }, [historyScenarios, searchQuery]);
+
+    // Delete single scenario
+    const handleDeleteScenario = async (id: string) => {
+        try {
+            await api.deleteScenario(id);
+            const saved = await api.listScenarios('add_agent');
+            setHistoryScenarios(saved);
+            if (selectedHistoryId === id) {
+                handleNewChat();
+            }
+        } catch (e) {
+            console.error('Failed to delete scenario', e);
+            alert(locale === 'zh' ? '删除失败' : 'Delete failed');
+        }
+    };
+
+    // Batch delete scenarios
+    const handleBatchDelete = async () => {
+        if (selectedScenarios.size === 0) return;
+        setIsDeleting(true);
+        try {
+            await api.batchDeleteScenarios(Array.from(selectedScenarios));
+            const saved = await api.listScenarios('add_agent');
+            setHistoryScenarios(saved);
+            setSelectedScenarios(new Set());
+            setIsBatchMode(false);
+            if (selectedScenarios.has(selectedHistoryId || '')) {
+                handleNewChat();
+            }
+        } catch (e) {
+            console.error('Failed to batch delete', e);
+            alert(locale === 'zh' ? '批量删除失败' : 'Batch delete failed');
+        } finally {
+            setIsDeleting(false);
+            setIsBatchDeleteDialogOpen(false);
+        }
+    };
+
+    // Clear all history (only add_agent type)
+    const handleClearAllHistory = async () => {
+        setIsDeleting(true);
+        try {
+            await api.clearHistoryByType('add_agent');
+            setHistoryScenarios([]);
+            handleNewChat();
+        } catch (e) {
+            console.error('Failed to clear history', e);
+            alert(locale === 'zh' ? '清空失败' : 'Clear failed');
+        } finally {
+            setIsDeleting(false);
+            setIsClearHistoryDialogOpen(false);
+            setIsHistoryViewOpen(false);
+        }
     };
     const leftPanel = (
         <div className="flex flex-col gap-6 h-full text-slate-900">
@@ -396,6 +471,14 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
                             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                                 {locale === 'zh' ? '插件历史' : 'Plugin History'}
                             </h3>
+                            {historyScenarios.length > 0 && (
+                                <button
+                                    onClick={() => setIsHistoryViewOpen(true)}
+                                    className="text-[10px] text-indigo-500 hover:text-indigo-700 font-medium"
+                                >
+                                    {locale === 'zh' ? '查看全部' : 'View All'}
+                                </button>
+                            )}
                         </div>
                         <div className="flex-1 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-indigo-100/50 hover:scrollbar-thumb-indigo-200/50">
                             {historyScenarios.length === 0 ? (
@@ -408,22 +491,35 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
                                     </span>
                                 </div>
                             ) : (
-                                historyScenarios.map((s) => (
+                                historyScenarios.slice(0, 5).map((s) => (
                                     <div
                                         key={s.id}
-                                        onClick={() => handleHistorySelect(s)}
-                                        className={`p-3 rounded-xl mb-2 cursor-pointer transition-all border ${selectedHistoryId === s.id
+                                        className={`p-3 rounded-xl mb-2 cursor-pointer transition-all border group relative ${selectedHistoryId === s.id
                                             ? 'bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-200 shadow-sm'
                                             : 'hover:bg-white border-transparent hover:border-indigo-50 hover:shadow-sm'
                                             }`}
                                     >
-                                        <div className="text-xs font-bold text-slate-700 line-clamp-1 mb-1">
-                                            {locale === 'zh' ? (s.title.zh || s.title.en) : s.title.en}
+                                        <div onClick={() => handleHistorySelect(s)} className="flex-1">
+                                            <div className="text-xs font-bold text-slate-700 line-clamp-1 mb-1 pr-6">
+                                                {locale === 'zh' ? (s.title.zh || s.title.en) : s.title.en}
+                                            </div>
+                                            <div className="flex items-center justify-between text-[10px] text-slate-400">
+                                                <span>{s.steps.length} turns</span>
+                                                <span>{new Date(s.createdAt || Date.now()).toLocaleDateString()}</span>
+                                            </div>
                                         </div>
-                                        <div className="flex items-center justify-between text-[10px] text-slate-400">
-                                            <span>{s.steps.length} turns</span>
-                                            <span>{new Date(s.createdAt || Date.now()).toLocaleDateString()}</span>
-                                        </div>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (confirm(locale === 'zh' ? '确定要删除这条记录吗？' : 'Delete this conversation?')) {
+                                                    handleDeleteScenario(s.id);
+                                                }
+                                            }}
+                                            className="absolute top-2 right-2 p-1 opacity-0 group-hover:opacity-100 hover:bg-red-50 rounded transition-all"
+                                            title={locale === 'zh' ? '删除' : 'Delete'}
+                                        >
+                                            <Trash2 size={12} className="text-slate-400 hover:text-red-500" />
+                                        </button>
                                     </div>
                                 ))
                             )}
@@ -649,6 +745,267 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
                 result={evaluationResult}
                 isLoading={isEvaluating}
                 variant="add_agent"
+            />
+
+            {/* Full Screen History View Modal */}
+            {isHistoryViewOpen && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[80vh] flex flex-col">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-6 border-b">
+                            <h2 className="text-2xl font-bold text-gray-800">
+                                {locale === 'zh' ? '插件历史记录' : 'Plugin History'}
+                                {isBatchMode && selectedScenarios.size > 0 && (
+                                    <span className="ml-3 text-sm font-normal text-blue-600">
+                                        ({selectedScenarios.size} {locale === 'zh' ? '已选择' : 'selected'})
+                                    </span>
+                                )}
+                            </h2>
+                            <div className="flex items-center gap-2">
+                                {/* Batch Mode Toggle */}
+                                {filteredScenarios.length > 0 && !isBatchMode && (
+                                    <button
+                                        onClick={() => {
+                                            setIsBatchMode(true);
+                                            setSelectedScenarios(new Set());
+                                        }}
+                                        className="px-3 py-1.5 text-xs text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors flex items-center gap-1.5 border border-blue-200"
+                                        title={locale === 'zh' ? '批量删除' : 'Batch Delete'}
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                        </svg>
+                                        <span>{locale === 'zh' ? '批量删除' : 'Batch Delete'}</span>
+                                    </button>
+                                )}
+
+                                {/* Batch Mode Actions */}
+                                {isBatchMode && (
+                                    <>
+                                        <button
+                                            onClick={() => {
+                                                if (selectedScenarios.size === filteredScenarios.length) {
+                                                    setSelectedScenarios(new Set());
+                                                } else {
+                                                    setSelectedScenarios(new Set(filteredScenarios.map(s => s.id)));
+                                                }
+                                            }}
+                                            className="px-3 py-1.5 text-xs text-gray-700 bg-white hover:bg-gray-50 rounded-md transition-colors flex items-center gap-1.5 border border-gray-200"
+                                        >
+                                            <span>{selectedScenarios.size === filteredScenarios.length
+                                                ? (locale === 'zh' ? '取消全选' : 'Deselect All')
+                                                : (locale === 'zh' ? '全选' : 'Select All')
+                                            }</span>
+                                        </button>
+
+                                        <button
+                                            onClick={() => {
+                                                if (selectedScenarios.size > 0) {
+                                                    setIsBatchDeleteDialogOpen(true);
+                                                }
+                                            }}
+                                            disabled={selectedScenarios.size === 0}
+                                            className={`px-3 py-1.5 text-xs rounded-md transition-colors flex items-center gap-1.5 border ${selectedScenarios.size > 0
+                                                ? 'text-red-700 bg-red-50 hover:bg-red-100 border-red-200'
+                                                : 'text-gray-400 bg-gray-50 border-gray-200 cursor-not-allowed'
+                                                }`}
+                                        >
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                            <span>{locale === 'zh' ? '删除选中' : 'Delete Selected'}</span>
+                                        </button>
+
+                                        <button
+                                            onClick={() => {
+                                                setIsBatchMode(false);
+                                                setSelectedScenarios(new Set());
+                                            }}
+                                            className="px-3 py-1.5 text-xs text-gray-700 bg-white hover:bg-gray-50 rounded-md transition-colors border border-gray-200"
+                                        >
+                                            {locale === 'zh' ? '取消' : 'Cancel'}
+                                        </button>
+                                    </>
+                                )}
+
+                                {/* Clear All Button */}
+                                {filteredScenarios.length > 0 && !isBatchMode && (
+                                    <button
+                                        onClick={() => {
+                                            setIsClearHistoryDialogOpen(true);
+                                        }}
+                                        className="px-3 py-1.5 text-xs text-gray-700 bg-white hover:bg-gray-50 rounded-md transition-colors flex items-center gap-1.5 border border-gray-200"
+                                        title={locale === 'zh' ? '清空所有历史记录' : 'Clear All History'}
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        <span>{locale === 'zh' ? '清空历史' : 'Clear'}</span>
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={() => {
+                                        setIsHistoryViewOpen(false);
+                                        setIsBatchMode(false);
+                                        setSelectedScenarios(new Set());
+                                    }}
+                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                    title={locale === 'zh' ? '关闭' : 'Close'}
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Search Bar */}
+                        <div className="px-6 pt-4 pb-2">
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder={locale === 'zh' ? '搜索对话...' : 'Search conversations...'}
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                                <svg
+                                    className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 overflow-y-auto p-6">
+                            {filteredScenarios.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                                    <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                                    </svg>
+                                    <p className="text-lg font-medium">{locale === 'zh' ? '暂无历史记录' : 'No history'}</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {filteredScenarios.map((scenario) => {
+                                        const isSelected = selectedScenarios.has(scenario.id);
+                                        return (
+                                            <div
+                                                key={scenario.id}
+                                                className={`p-4 rounded-lg border-2 transition-all hover:shadow-lg relative ${isBatchMode
+                                                    ? isSelected
+                                                        ? 'border-blue-500 bg-blue-50 cursor-pointer'
+                                                        : 'border-gray-200 hover:border-blue-300 cursor-pointer'
+                                                    : selectedHistoryId === scenario.id
+                                                        ? 'border-blue-500 bg-blue-50 cursor-pointer'
+                                                        : 'border-gray-200 hover:border-blue-300 cursor-pointer'
+                                                    }`}
+                                                onClick={() => {
+                                                    if (isBatchMode) {
+                                                        const newSelected = new Set(selectedScenarios);
+                                                        if (isSelected) {
+                                                            newSelected.delete(scenario.id);
+                                                        } else {
+                                                            newSelected.add(scenario.id);
+                                                        }
+                                                        setSelectedScenarios(newSelected);
+                                                    } else {
+                                                        handleHistorySelect(scenario);
+                                                    }
+                                                }}
+                                            >
+                                                {/* Batch Mode Checkbox */}
+                                                {isBatchMode && (
+                                                    <div className="absolute top-2 left-2 z-10">
+                                                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isSelected
+                                                            ? 'bg-blue-500 border-blue-500'
+                                                            : 'bg-white border-gray-300'
+                                                            }`}>
+                                                            {isSelected && (
+                                                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                                </svg>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <div className="flex items-start justify-between mb-2">
+                                                    <h3 className={`font-semibold text-gray-800 flex-1 line-clamp-2 ${isBatchMode ? 'ml-7' : ''}`}>
+                                                        {locale === 'zh' ? (scenario.title.zh || scenario.title.en) : scenario.title.en}
+                                                    </h3>
+                                                    {!isBatchMode && (
+                                                        <div className="flex items-center gap-1 ml-2">
+                                                            {/* Delete Button */}
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (window.confirm(locale === 'zh' ? '确定要删除这条记录吗？' : 'Delete this conversation?')) {
+                                                                        handleDeleteScenario(scenario.id);
+                                                                    }
+                                                                }}
+                                                                className="p-1 hover:bg-red-50 rounded transition-colors"
+                                                                title={locale === 'zh' ? '删除' : 'Delete'}
+                                                            >
+                                                                <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <p className="text-sm text-gray-500 line-clamp-2 mb-2">
+                                                    {scenario.userQuery || (locale === 'zh' ? '暂无内容' : 'No content')}
+                                                </p>
+                                                <div className="flex items-center justify-between text-xs text-gray-400">
+                                                    <span>{scenario.steps?.length || scenario.totalSteps || 0} {locale === 'zh' ? '步' : 'steps'}</span>
+                                                    {!isBatchMode && selectedHistoryId === scenario.id && (
+                                                        <span className="text-blue-500 font-medium">
+                                                            {locale === 'zh' ? '当前' : 'Active'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Clear History Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={isClearHistoryDialogOpen}
+                onClose={() => !isDeleting && setIsClearHistoryDialogOpen(false)}
+                onConfirm={handleClearAllHistory}
+                title={locale === 'zh' ? '清空插件历史记录' : 'Clear Plugin History'}
+                message={locale === 'zh'
+                    ? '此操作将永久删除所有插件历史会话记录，包括：\n\n• 所有对话内容\n• 所有水印数据\n• 所有评估结果\n\n此操作不可撤销，是否确认清空？'
+                    : 'This action will permanently delete all plugin conversation history, including:\n\n• All conversation content\n• All watermark data\n• All evaluation results\n\nThis action cannot be undone. Are you sure you want to clear all history?'}
+                confirmText={isDeleting ? (locale === 'zh' ? '删除中...' : 'Deleting...') : (locale === 'zh' ? '确认清空' : 'Clear All')}
+                cancelText={locale === 'zh' ? '取消' : 'Cancel'}
+                isDestructive={true}
+            />
+
+            {/* Batch Delete Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={isBatchDeleteDialogOpen}
+                onClose={() => !isDeleting && setIsBatchDeleteDialogOpen(false)}
+                onConfirm={handleBatchDelete}
+                title={locale === 'zh' ? '批量删除' : 'Batch Delete'}
+                message={locale === 'zh'
+                    ? `确定要删除选中的 ${selectedScenarios.size} 条记录吗？\n\n此操作不可撤销。`
+                    : `Are you sure you want to delete ${selectedScenarios.size} selected conversation(s)?\n\nThis action cannot be undone.`}
+                confirmText={isDeleting ? (locale === 'zh' ? '删除中...' : 'Deleting...') : (locale === 'zh' ? '确认删除' : 'Delete')}
+                cancelText={locale === 'zh' ? '取消' : 'Cancel'}
+                isDestructive={true}
             />
         </div>
     );
