@@ -721,6 +721,17 @@ async def clear_all_history():
         print(f"[ERROR] Clear all failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.delete("/api/scenarios/clear_by_type/{scenario_type}")
+async def clear_history_by_type(scenario_type: str):
+    """Clear conversation history by type (benchmark or add_agent)"""
+    try:
+        deleted_count = db.clear_conversations_by_type(scenario_type)
+        print(f"[INFO] Cleared {scenario_type} history: {deleted_count} conversations deleted")
+        return {"status": "success", "deleted_count": deleted_count}
+    except Exception as e:
+        print(f"[ERROR] Clear by type failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/scenarios/batch_delete")
 async def batch_delete_scenarios(req: dict):
     """Batch delete multiple scenarios"""

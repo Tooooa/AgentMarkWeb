@@ -153,6 +153,11 @@ export const api = {
         return response.data;
     },
 
+    clearHistoryByType: async (scenarioType: string) => {
+        const response = await axios.delete(`${API_BASE}/api/scenarios/clear_by_type/${scenarioType}`);
+        return response.data;
+    },
+
     batchDeleteScenarios: async (ids: string[]) => {
         const response = await axios.post(`${API_BASE}/api/scenarios/batch_delete`, { ids });
         return response.data;
