@@ -1138,7 +1138,8 @@ async def step_session(req: StepRequest):
                         model_override=sess.model,
                         tools_override=tools_override,
                         execute_tools=True,
-                        debug=True
+                        debug=True,
+                        max_turns=10  # Limit to prevent infinite loops
                     )
                     
                     # Consume stream
