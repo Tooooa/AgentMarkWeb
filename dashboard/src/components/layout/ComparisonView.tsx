@@ -115,8 +115,38 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
         return result;
     }, [visibleSteps]);
 
+    const toolCandidates = useMemo(() => {
+        const names = new Set<string>();
+        for (const step of visibleSteps) {
+            if (Array.isArray(step.distribution)) {
+                for (const item of step.distribution) {
+                    if (item?.name) {
+                        names.add(item.name);
+                    }
+                }
+            }
+            if (names.size >= 12) {
+                break;
+            }
+        }
+        return Array.from(names);
+    }, [visibleSteps]);
+
+    const buildQueryWithTools = (query: string) => {
+        if (!query) return query;
+        if (!toolCandidates.length) return query;
+        if (/候选动作|可用工具|Available Tools|Tools:/i.test(query)) return query;
+        const header = locale === 'zh' ? '可用工具' : 'Available Tools';
+        const list = toolCandidates.map((name) => `- ${name}`).join('\n');
+        return `${query}\n\n${header}:\n${list}`;
+    };
+
     const renderUserQueryPair = (leftQuery: string, rightQuery: string | undefined, key: string) => {
-        const resolvedRight = rightQuery ?? leftQuery;
+        const leftWithTools = buildQueryWithTools(leftQuery);
+        const resolvedRight = rightQuery ?? (promptInstruction ? `${leftWithTools}\n\n${promptInstruction}` : leftWithTools);
+        const rightLabel = promptInstruction
+            ? (locale === 'zh' ? '用户提问 + 指令' : 'User Question + Instruction')
+            : (locale === 'zh' ? '用户提问' : 'User Question');
         return (
         <div key={key} className="col-span-2 my-4">
             <div className="w-full bg-gradient-to-r from-indigo-50/50 to-violet-50/50 border border-indigo-100 rounded-2xl p-6">
@@ -130,7 +160,7 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
                             </div>
                             <div className="flex-1">
                                 <p className="font-bold text-[10px] text-slate-400 mb-1 uppercase tracking-wide">{locale === 'zh' ? '用户提问' : 'User Question'}</p>
-                                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{leftQuery}</p>
+                                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{leftWithTools}</p>
                             </div>
                         </div>
                     </div>
@@ -142,7 +172,7 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
                                 </div>
                             </div>
                             <div className="flex-1">
-                                <p className="font-bold text-[10px] text-slate-400 mb-1 uppercase tracking-wide">{locale === 'zh' ? '用户提问 + 指令' : 'User Question + Instruction'}</p>
+                                <p className="font-bold text-[10px] text-slate-400 mb-1 uppercase tracking-wide">{rightLabel}</p>
                                 <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{resolvedRight}</p>
                             </div>
                         </div>

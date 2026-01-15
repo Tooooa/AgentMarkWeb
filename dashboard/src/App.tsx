@@ -16,6 +16,22 @@ import BookDemo from './components/layout/BookDemo';
 import { useSimulation } from './hooks/useSimulation';
 import { I18nProvider, useI18n } from './i18n/I18nContext';
 
+const buildPromptTraceText = (promptTrace?: string) => {
+  if (!promptTrace) return '';
+  try {
+    const parsed = JSON.parse(promptTrace);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((msg) => typeof msg?.content === 'string' && msg.content.trim())
+        .map((msg) => `${msg.role}: ${msg.content}`)
+        .join('\n');
+    }
+  } catch (err) {
+    // fall back to raw promptTrace string
+  }
+  return promptTrace;
+};
+
 function AppContent() {
   const { locale } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');
@@ -374,7 +390,12 @@ function AppContent() {
                     erasedIndices={erasedIndices}
                     scenarioId={activeScenario.id}
                     evaluationResult={evaluationResult}
-                    userQueryLeft={customQuery || activeScenario.userQuery}
+                    userQueryLeft={
+                      buildPromptTraceText(
+                        activeScenario.promptTrace || activeScenario.baselinePromptTrace
+                      ) || customQuery || activeScenario.userQuery
+                    }
+                    userQueryRight={customQuery || activeScenario.userQuery}
                     evaluationRef={evaluationRef}
                     utilityMonitorRef={utilityMonitorRef}
                     chartRef={chartRef}
