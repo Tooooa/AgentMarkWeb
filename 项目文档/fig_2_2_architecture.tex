@@ -1,0 +1,69 @@
+\documentclass[tikz,border=6pt]{standalone}
+\usepackage{ctex}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds,calc}
+%
+\begin{document}
+\begin{tikzpicture}[
+  font=\sffamily\small,
+  box/.style={draw=black, rounded corners=2pt, fill=white, align=center, minimum width=3.6cm, minimum height=0.95cm, inner sep=6pt},
+  boxwide/.style={draw=black, rounded corners=2pt, fill=white, align=center, minimum width=4.4cm, minimum height=0.95cm, inner sep=6pt},
+  group/.style={draw=black, rounded corners=3pt, fill=none, inner sep=10pt},
+  layerlabel/.style={font=\sffamily\bfseries\small, fill=white, inner sep=1pt},
+  arrow/.style={-Latex, draw=black, line width=0.9pt},
+  audit/.style={-Latex, draw=black, line width=0.8pt, densely dashed}
+]
+%
+% perception layer
+\node[boxwide] (ext) at (0,0) {外部 Agent 与业务系统\\ReAct、Swarm、自研};
+\node[box] (chrome) at (4.8,0) {Chrome 插件\\拦截、注入、采集};
+\node[box] (proxy) at (8.8,0) {AgentMark Proxy\\OpenAI 风格接口};
+\node[boxwide] (api) at (13.2,0) {目标大模型 API\\DeepSeek、OpenAI 兼容};
+%
+\begin{pgfonlayer}{background}
+  \node[group, fit=(chrome)(proxy)] (perception) {};
+\end{pgfonlayer}
+\node[layerlabel, anchor=south west] at (perception.north west) {感知层};
+%
+% request lane
+\draw[arrow] (ext.east) -- (chrome.west);
+\draw[arrow] (chrome.east) -- (proxy.west);
+\draw[arrow] (proxy.east) -- node[above, font=\scriptsize, fill=white, inner sep=1pt] {转发} (api.west);
+%
+% response lane, right to left
+\draw[arrow] ([yshift=-9mm]api.west) -- ([yshift=-9mm]proxy.east);
+\draw[arrow] ([yshift=-9mm]proxy.west) -- node[below, font=\scriptsize, fill=white, inner sep=1pt] {返回结果与水印元信息} ([yshift=-9mm]chrome.east);
+\draw[arrow] ([yshift=-9mm]chrome.west) -- ([yshift=-9mm]ext.east);
+%
+% core logic layer
+\node[box] (dps) at (6.6,-3.05) {分布保留采样\\Differential、CyclicShift};
+\node[box] (codec) at (11.0,-3.05) {抗擦除编码与解码\\RLNC、Hamming、Parity};
+\draw[arrow] (dps.east) -- (codec.west);
+%
+\begin{pgfonlayer}{background}
+  \node[group, fit=(dps)(codec)] (core) {};
+\end{pgfonlayer}
+\node[layerlabel, anchor=south west] at (core.north west) {算法层 Core Logic};
+%
+\coordinate (coreTop) at ($(dps.north)!0.5!(codec.north)$);
+\draw[audit] (proxy.south) -- node[right, font=\scriptsize, fill=white, inner sep=1pt] {$P_t$、$\hat{b}_t$、$Context_t$} (coreTop);
+%
+% application layer
+\node[box] (auditbe) at (6.6,-5.45) {审计后端\\FastAPI 与 SQLite};
+\node[box] (dash) at (11.0,-5.45) {监管大屏\\解码、检验、还原};
+\draw[arrow] (auditbe.east) -- (dash.west);
+%
+\begin{pgfonlayer}{background}
+  \node[group, fit=(auditbe)(dash)] (app) {};
+\end{pgfonlayer}
+\node[layerlabel, anchor=south west] at (app.north west) {应用层 Dashboard};
+%
+% audit and decoding evidence
+\draw[audit] (chrome.south) to[out=-110,in=170]
+  node[pos=0.55, above, font=\scriptsize, fill=white, inner sep=1pt] {日志上报} (auditbe.west);
+%
+\draw[audit] (codec.south) to[out=-90,in=0]
+  node[pos=0.55, above, font=\scriptsize, fill=white, inner sep=1pt] {解码结果} (auditbe.north east);
+%
+\end{tikzpicture}
+\end{document}

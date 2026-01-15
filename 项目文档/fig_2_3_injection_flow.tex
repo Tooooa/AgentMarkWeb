@@ -1,0 +1,52 @@
+\documentclass[tikz,border=6pt]{standalone}
+\usepackage{ctex}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds,calc}
+%
+\begin{document}
+\begin{tikzpicture}[
+  font=\sffamily\small,
+  box/.style={draw=black, rounded corners=2pt, fill=white, align=center, minimum width=3.2cm, minimum height=0.95cm, inner sep=6pt},
+  group/.style={draw=black, rounded corners=3pt, fill=none, inner sep=10pt},
+  arrow/.style={-Latex, draw=black, line width=0.9pt},
+  audit/.style={-Latex, draw=black, line width=0.8pt, densely dashed}
+]
+%
+% top chain
+\node[box] (u) at (0,0) {用户};
+\node[box] (a) at (4.1,0) {业务前端\\或外部 Agent};
+\node[box] (e) at (8.2,0) {Chrome 插件\\接入与采集};
+\node[box] (p) at (12.3,0) {AgentMark Proxy};
+\node[box] (l) at (16.4,0) {目标 LLM API};
+%
+\begin{pgfonlayer}{background}
+  \node[group, fit=(u)(a)(e)(p)(l)] (g) {};
+\end{pgfonlayer}
+\node[anchor=south west, font=\bfseries] at (g.north west) {在线注入链路};
+%
+% request lane, left to right
+\draw[arrow] (u) -- (a);
+\draw[arrow] (a) -- (e);
+\draw[arrow] (e) -- (p);
+\draw[arrow] (p) -- node[above, font=\scriptsize] {转发} (l);
+%
+% response lane, right to left, slightly below
+\draw[arrow] ([yshift=-6mm]l.west) -- ([yshift=-6mm]p.east);
+\draw[arrow] ([yshift=-6mm]p.west) -- ([yshift=-6mm]e.east);
+\draw[arrow] ([yshift=-6mm]e.west) -- ([yshift=-6mm]a.east);
+%
+% execution
+\node[box] (x) at (4.1,-2.2) {执行 $\hat{b}_t$\\推进子目标};
+\draw[arrow] (a.south) -- (x.north);
+%
+% core logic and audit sink
+\node[box] (c) at (12.3,-2.2) {Core Logic\\采样与编码};
+\draw[arrow] (p.south) -- (c.north);
+\draw[arrow] (c.north) -- (p.south);
+%
+\node[box] (s) at (8.2,-2.2) {日志服务\\或数据库};
+\draw[audit] (e.south) -- node[above, font=\scriptsize, fill=white, inner sep=1pt] {日志旁路} (s.north);
+\draw[audit] (c.west) -- node[above, font=\scriptsize, fill=white, inner sep=1pt] {结构化事件} (s.east);
+%
+\end{tikzpicture}
+\end{document}

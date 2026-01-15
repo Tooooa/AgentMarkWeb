@@ -1,0 +1,40 @@
+\documentclass[tikz,border=6pt]{standalone}
+\usepackage{ctex}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+%
+\begin{document}
+\begin{tikzpicture}[
+  font=\sffamily\small,
+  state/.style={draw=black, rounded corners=2pt, fill=white, align=center, minimum width=2.8cm, minimum height=0.9cm, inner sep=6pt},
+  note/.style={draw=black, rounded corners=2pt, fill=white, align=left, inner sep=6pt, font=\sffamily\scriptsize, text width=4.0cm},
+  arrow/.style={-Latex, draw=black, line width=0.9pt}
+]
+%
+\node[state] (created) {Created};
+\node[state, right=18mm of created] (running) {Running};
+\node[state, right=18mm of running] (done) {Done};
+\node[state, right=18mm of done] (archived) {Archived};
+\node[state, below=14mm of running] (paused) {Paused};
+%
+\draw[arrow] (created) -- (running);
+\draw[arrow] (running) -- (done);
+\draw[arrow] (done) -- (archived);
+\draw[arrow] (running) -- (paused);
+\draw[arrow] (paused) -- (running);
+%
+\draw[arrow] (running) to[out=60,in=120,looseness=7] node[above, font=\scriptsize] {step 循环推进} (running);
+%
+% notes
+\node[note, above=7mm of created] (n1) {分配 session\_id\\载荷与 key version};
+\node[note, above=7mm of done] (n2) {Finish\\或达到 max\_steps};
+\node[note, below=9mm of paused] (n3) {用户中止\\断网\\页面刷新};
+\node[note, below=9mm of archived] (n4) {落库\\导出\\归档};
+%
+\draw[arrow] (n1) -- (created);
+\draw[arrow] (n2) -- (done);
+\draw[arrow] (n3) -- (paused);
+\draw[arrow] (n4) -- (archived);
+%
+\end{tikzpicture}
+\end{document}

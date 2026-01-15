@@ -154,6 +154,22 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
         if (baselinePromptTraceText) {
             setBaselinePromptTraceText('');
         }
+
+        // Create a user input step to display in the conversation
+        const userInputStep: Step = {
+            stepIndex: steps.length,
+            thought: content,
+            action: 'user_input',
+            toolDetails: '',
+            distribution: [],
+            watermark: { present: false, confidence: 0 },
+            stepType: 'user_input',
+            isHidden: false
+        };
+
+        // Add user input step to the conversation
+        setSteps((prev) => [...prev, userInputStep]);
+
         try {
             let sid = sessionId || await startSession();
             let res;
