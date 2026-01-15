@@ -207,6 +207,19 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
                     if (revealSeqRef.current !== streamSeq) return;
                     if (!evt || typeof evt !== 'object') return;
 
+                    if (evt.type === 'status') {
+                        const state = evt.data?.state;
+                        if (state === 'proxy_unavailable') {
+                            applyPlaceholderPatch({ thought: locale === 'zh' ? '代理不可用，切换到直连...' : 'Proxy unavailable, switching to direct...' });
+                        }
+                        if (state === 'proxy_fallback') {
+                            applyPlaceholderPatch({ thought: locale === 'zh' ? '代理异常，切换到直连...' : 'Proxy unstable, switching to direct...' });
+                        }
+                        if (state === 'retrying') {
+                            applyPlaceholderPatch({ thought: locale === 'zh' ? '服务繁忙，正在重试...' : 'Service busy, retrying...' });
+                        }
+                    }
+
                     if (evt.type === 'thought_delta') {
                         const text = evt.data?.text;
                         if (typeof text === 'string' && text.trim()) {

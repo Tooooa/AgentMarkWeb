@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from openai import OpenAI, AsyncOpenAI
 from agentmark.sdk.prompt_adapter import get_prompt_instruction, extract_json_payload
+from openai import APIConnectionError, APIStatusError, APITimeoutError
 
 # Import shared utilities
 from dashboard.server.shared import (
@@ -717,14 +718,46 @@ async def add_agent_turn(req: AddAgentTurnRequest):
 
         if not use_swarm:
             # Fallback to single turn legacy
-            client = _build_proxy_client(req.apiKey or session.api_key)
-            w_completion = client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                tools=ADD_AGENT_TOOLS, 
-                extra_body={"agentmark": agentmark_body},
-                temperature=0.0,
-            )
+            resolved_key = req.apiKey or session.api_key
+            proxy_client = _build_proxy_client(resolved_key)
+            direct_client = OpenAI(api_key=resolved_key, base_url=_get_base_llm_base())
+
+            def is_retryable(err: Exception) -> bool:
+                if isinstance(err, (APIConnectionError, APITimeoutError)):
+                    return True
+                if isinstance(err, APIStatusError):
+                    return int(getattr(err, "status_code", 0) or 0) in {429, 500, 502, 503, 504}
+                return False
+
+            w_completion = None
+            last_exc: Optional[Exception] = None
+            for attempt in range(1, 4):
+                try:
+                    w_completion = proxy_client.chat.completions.create(
+                        model=model_name,
+                        messages=messages,
+                        tools=ADD_AGENT_TOOLS,
+                        extra_body={"agentmark": agentmark_body},
+                        temperature=0.0,
+                    )
+                    break
+                except Exception as exc:
+                    last_exc = exc
+                    if attempt < 3 and is_retryable(exc):
+                        await asyncio.sleep(0.6 * (2 ** (attempt - 1)))
+                        continue
+                    # Fall back to direct client without extra_body (proxy may be down / incompatible).
+                    w_completion = direct_client.chat.completions.create(
+                        model=model_name,
+                        messages=messages,
+                        tools=ADD_AGENT_TOOLS,
+                        temperature=0.0,
+                    )
+                    last_exc = None
+                    break
+
+            if w_completion is None:
+                raise last_exc or RuntimeError("Completion failed")
             w_latency = time.time() - w_start
             msg = w_completion.choices[0].message
             
@@ -940,43 +973,85 @@ async def add_agent_turn_stream(req: AddAgentTurnRequest):
             else:
                 # Non-swarm: best-effort streaming of the LLM content. We still emit thought/tool deltas,
                 # then emit a final Step built from the accumulated content.
-                client = _build_proxy_client(req.apiKey or session.api_key)
+                resolved_key = req.apiKey or session.api_key
+                proxy_client = _build_proxy_client(resolved_key)
+                direct_client = OpenAI(api_key=resolved_key, base_url=_get_base_llm_base())
                 partial_buf = ""
                 last_sent_thought = None
                 tool_call_buf: List[Dict[str, Any]] = []
 
-                stream = client.chat.completions.create(
-                    model=model_name,
-                    messages=messages,
-                    tools=ADD_AGENT_TOOLS,
-                    extra_body={"agentmark": agentmark_body},
-                    temperature=0.0,
-                    stream=True,
-                )
+                def is_retryable(err: Exception) -> bool:
+                    if isinstance(err, (APIConnectionError, APITimeoutError)):
+                        return True
+                    if isinstance(err, APIStatusError):
+                        return int(getattr(err, "status_code", 0) or 0) in {429, 500, 502, 503, 504}
+                    return False
 
-                for ev in stream:
-                    payload = _coerce_to_dict(ev)
-                    delta = _extract_stream_delta(payload)
-                    if not delta:
-                        continue
-                    content_delta = delta.get("content")
-                    if isinstance(content_delta, str) and content_delta:
-                        partial_buf += content_delta
-                        thought = _extract_partial_thought(partial_buf) or _extract_thought_from_raw_output(partial_buf)
-                        if thought and thought != last_sent_thought:
-                            last_sent_thought = thought
-                            yield json.dumps({"type": "thought_delta", "data": {"text": thought}}) + "\n"
+                def create_stream(client: OpenAI, *, use_agentmark: bool):
+                    kwargs: Dict[str, Any] = {
+                        "model": model_name,
+                        "messages": messages,
+                        "tools": ADD_AGENT_TOOLS,
+                        "temperature": 0.0,
+                        "stream": True,
+                    }
+                    if use_agentmark:
+                        kwargs["extra_body"] = {"agentmark": agentmark_body}
+                    return client.chat.completions.create(**kwargs)
 
-                    tool_calls = delta.get("tool_calls")
-                    if isinstance(tool_calls, list) and tool_calls:
-                        tool_call_buf = tool_calls
-                        first = tool_calls[0] if isinstance(tool_calls[0], dict) else {}
-                        fn = first.get("function") if isinstance(first, dict) else None
-                        fn = fn if isinstance(fn, dict) else {}
-                        tool_name = fn.get("name")
-                        tool_args = fn.get("arguments")
-                        if tool_name:
-                            yield json.dumps({"type": "tool_call", "data": {"name": tool_name, "arguments": tool_args}}) + "\n"
+                # Prefer proxy (for agentmark extra_body). If proxy isn't reachable, fall back to direct.
+                stream = None
+                use_agentmark = True
+                try:
+                    stream = create_stream(proxy_client, use_agentmark=True)
+                except Exception as first_exc:
+                    use_agentmark = False
+                    yield json.dumps({"type": "status", "data": {"state": "proxy_unavailable", "reason": str(first_exc)}}) + "\n"
+                    stream = create_stream(direct_client, use_agentmark=False)
+
+                max_attempts = 3
+                attempt = 0
+                while True:
+                    attempt += 1
+                    try:
+                        for ev in stream:
+                            payload = _coerce_to_dict(ev)
+                            delta = _extract_stream_delta(payload)
+                            if not delta:
+                                continue
+                            content_delta = delta.get("content")
+                            if isinstance(content_delta, str) and content_delta:
+                                partial_buf += content_delta
+                                thought = _extract_partial_thought(partial_buf) or _extract_thought_from_raw_output(partial_buf)
+                                if thought and thought != last_sent_thought:
+                                    last_sent_thought = thought
+                                    yield json.dumps({"type": "thought_delta", "data": {"text": thought}}) + "\n"
+
+                            tool_calls = delta.get("tool_calls")
+                            if isinstance(tool_calls, list) and tool_calls:
+                                tool_call_buf = tool_calls
+                                first = tool_calls[0] if isinstance(tool_calls[0], dict) else {}
+                                fn = first.get("function") if isinstance(first, dict) else None
+                                fn = fn if isinstance(fn, dict) else {}
+                                tool_name = fn.get("name")
+                                tool_args = fn.get("arguments")
+                                if tool_name:
+                                    yield json.dumps({"type": "tool_call", "data": {"name": tool_name, "arguments": tool_args}}) + "\n"
+                        break
+                    except Exception as stream_exc:
+                        if attempt >= max_attempts or not is_retryable(stream_exc):
+                            raise
+                        wait_s = 0.6 * (2 ** (attempt - 1))
+                        yield json.dumps({"type": "status", "data": {"state": "retrying", "attempt": attempt, "reason": str(stream_exc)}}) + "\n"
+                        await asyncio.sleep(wait_s)
+                        partial_buf = ""
+                        last_sent_thought = None
+                        tool_call_buf = []
+                        # If the proxy path is flaky, fall back to direct on retry.
+                        if use_agentmark and isinstance(stream_exc, (APIConnectionError, APITimeoutError, APIStatusError)):
+                            use_agentmark = False
+                            yield json.dumps({"type": "status", "data": {"state": "proxy_fallback", "reason": str(stream_exc)}}) + "\n"
+                        stream = create_stream(proxy_client, use_agentmark=True) if use_agentmark else create_stream(direct_client, use_agentmark=False)
 
                 session.step_count += 1
                 step_data = _build_add_agent_step(
@@ -999,7 +1074,16 @@ async def add_agent_turn_stream(req: AddAgentTurnRequest):
                 }) + "\n"
 
         except Exception as e:
-            yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+            msg = str(e)
+            status_code = None
+            if isinstance(e, APIStatusError):
+                status_code = int(getattr(e, "status_code", 0) or 0) or None
+                msg = f"Upstream HTTP {status_code}: {msg}" if status_code else msg
+                if status_code == 503:
+                    msg += " (Service Unavailable: upstream overloaded/down; please retry later.)"
+            if isinstance(e, (APIConnectionError, APITimeoutError)):
+                msg = f"Upstream connection failed: {msg}"
+            yield json.dumps({"type": "error", "message": msg, "status_code": status_code}) + "\n"
 
     return StreamingResponse(event_gen(), media_type="application/x-ndjson")
 
