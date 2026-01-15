@@ -201,6 +201,7 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
             >
                 {/* Column Headers - Fixed at top */}
                 <div ref={evaluationRef} className="sticky top-0 bg-slate-50 z-20 px-4 pt-4 pb-2">
+                    <div ref={utilityMonitorRef} className="h-0 w-0 overflow-hidden" />
                     <div className="grid grid-cols-2 gap-6">
                         <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
                             <span className="font-bold text-slate-600 text-sm">{locale === 'zh' ? '无水印Agent' : 'Original (Base)'}</span>
@@ -215,6 +216,23 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
                             }`}>{locale === 'zh' ? '有水印Agent' : 'Ours (Watermarked)'}</span>
                         </div>
                     </div>
+                    {evaluationResult && (
+                        <div className="mt-3 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+                            <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
+                                <span>
+                                    {locale === 'zh' ? '基线' : 'Base'}: {Number(evaluationResult.model_a_score).toFixed(1)}/10
+                                </span>
+                                <span className={isAddAgent ? 'text-amber-700' : 'text-indigo-700'}>
+                                    {locale === 'zh' ? '有水印' : 'Ours'}: {Number(evaluationResult.model_b_score).toFixed(1)}/10
+                                </span>
+                            </div>
+                            {evaluationResult.reason && (
+                                <p className="mt-2 text-xs text-slate-500 whitespace-pre-wrap leading-relaxed">
+                                    {evaluationResult.reason}
+                                </p>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Content area with padding */}
