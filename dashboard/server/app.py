@@ -1179,10 +1179,13 @@ async def step_session(req: StepRequest):
                     # Convert new_messages to our trajectory format
                     final_answer_text = ""
                     done = False
+                    full_text_for_token_estimate = ""
                     
                     for msg in new_messages:
                         role = msg.get("role")
                         content = msg.get("content") or ""
+                        if content:
+                            full_text_for_token_estimate += content
                         
                         if role == "assistant":
                             tool_calls = msg.get("tool_calls")
@@ -1245,6 +1248,7 @@ async def step_session(req: StepRequest):
                     agent_state.done = done
 
                     step_latency = time.time() - step_start_time
+                    est_tokens = len(full_text_for_token_estimate) / 4 if full_text_for_token_estimate else 0.0
                     
                     final_data = {
                         "agent": agent_state.role,
@@ -1255,7 +1259,7 @@ async def step_session(req: StepRequest):
                         "final_answer": final_answer_text,
                         "distribution": [], # NO BLUE BARS
                         "stepIndex": agent_state.step_count - 1,
-                        "metrics": {"latency": step_latency, "tokens": 0.0},
+                        "metrics": {"latency": step_latency, "tokens": est_tokens},
                     }
                     return final_data, None, 0, None
                 

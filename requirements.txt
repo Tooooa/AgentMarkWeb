@@ -36,3 +36,4 @@ sentence-transformers>=2.2.0
 
 # 注意：ALFWorld 在 Docker 中单独安装，本地环境请运行：
 # pip install alfworld
+openai-swarm

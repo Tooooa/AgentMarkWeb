@@ -234,7 +234,7 @@ Open Terminal 1:
 cd AgentMark
 source ~/miniconda3/etc/profile.d/conda.sh && conda activate AgentMark
 
-export DEEPSEEK_API_KEY=sk-your-key
+export DEEPSEEK_API_KEY=sk-028c7d27014d4feb892e0d05974f6ff4
 export TARGET_LLM_MODEL=deepseek-chat
 export AGENTMARK_DEBUG=1
 export AGENTMARK_TOOL_MODE=proxy   # Use "proxy constructs tool_calls" plugin mode
