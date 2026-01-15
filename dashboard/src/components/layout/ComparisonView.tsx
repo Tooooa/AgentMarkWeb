@@ -135,15 +135,22 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({
     const buildQueryWithTools = (query: string) => {
         if (!query) return query;
         if (!toolCandidates.length) return query;
-        if (/候选动作|可用工具|Available Tools|Tools:/i.test(query)) return query;
+        if (/候选动作|可用工具|Available Tools|Tools:/i.test(query)) {
+            return query.replace(/\n{2,}/g, '\n');
+        }
         const header = locale === 'zh' ? '可用工具' : 'Available Tools';
         const list = toolCandidates.map((name) => `- ${name}`).join('\n');
-        return `${query}\n\n${header}:\n${list}`;
+        return `${query}\n${header}:\n${list}`.replace(/\n{2,}/g, '\n');
     };
 
     const renderUserQueryPair = (leftQuery: string, rightQuery: string | undefined, key: string) => {
         const leftWithTools = buildQueryWithTools(leftQuery);
-        const resolvedRight = rightQuery ?? (promptInstruction ? `${leftWithTools}\n\n${promptInstruction}` : leftWithTools);
+        const rightWithTools = rightQuery ? buildQueryWithTools(rightQuery) : leftWithTools;
+        let resolvedRight = rightWithTools;
+        if (promptInstruction) {
+            const withoutInstruction = rightWithTools.replace(promptInstruction, '').trim();
+            resolvedRight = `${withoutInstruction}\n${promptInstruction}`.replace(/\n{2,}/g, '\n').trim();
+        }
         const rightLabel = promptInstruction
             ? (locale === 'zh' ? '用户提问 + 指令' : 'User Question + Instruction')
             : (locale === 'zh' ? '用户提问' : 'User Question');
