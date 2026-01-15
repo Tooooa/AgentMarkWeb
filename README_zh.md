@@ -12,7 +12,7 @@
 </div>
 
 <div align="center">
-  <img src="assets/overview.png" width="75%" alt="AgentMark Overview"/>
+  <img src="assets/overview_zh.png" width="75%" alt="AgentMark Overview"/>
 </div>
 
 ---
@@ -23,7 +23,7 @@
 本项目旨在提供一套可复现、模块化且易于扩展的代码库，用于评估水印算法在复杂 Agent 任务中的性能、鲁棒性及隐蔽性。核心机制将 Agent 的决策过程分解为 **规划行为（Planning Behavior）** 和 **执行动作（Execution Action）**，通过在规划阶段进行分布保留采样来嵌入水印，从而在不影响下游任务效用（Utility）的前提下实现可验证的版权保护。
 
 <div align="center">
-  <img src="assets/framework.png" width="100%" alt="AgentMark Framework"/>
+  <img src="assets/framework_zh.png" width="100%" alt="AgentMark Framework"/>
 </div>
 
 ### ✨ 主要特性：
