@@ -175,7 +175,9 @@ const AddAgentDashboard: React.FC<AddAgentDashboardProps> = ({
                     throw err;
                 }
             }
-            if (res.step) {
+            if (res.steps && Array.isArray(res.steps)) {
+                setSteps((prev) => [...prev, ...(res.steps as Step[])]);
+            } else if (res.step) {
                 setSteps((prev) => [...prev, res.step as Step]);
             }
             const promptTrace = res.promptTrace;

@@ -265,6 +265,7 @@ const FlowFeed: React.FC<FlowFeedProps> = ({
                                     // Removed onBlur to allow clicking on the popup
                                     onKeyDown={async (e) => {
                                         if (e.key === 'Enter' && !isSending && !isPlaying) {
+                                            e.preventDefault(); // Prevent default form submission
                                             const val = continueInput.trim();
                                             if (val && onContinue) {
                                                 setContinueInput(''); // 立即清空
@@ -280,6 +281,7 @@ const FlowFeed: React.FC<FlowFeedProps> = ({
                                     }}
                                 />
                                 <button
+                                    type="button" // Explicitly set type to button
                                     className={`rounded-2xl px-6 py-2.5 text-sm font-semibold transition-all flex items-center gap-2
                                         ${isSending || isPlaying
                                             ? 'bg-slate-300 text-slate-500 cursor-not-allowed'

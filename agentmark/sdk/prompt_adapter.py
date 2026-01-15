@@ -298,6 +298,17 @@ class PromptWatermarkWrapper:
             probs = normalize_probabilities(weights)
 
         if not probs:
+            # DEBUG: Log the raw output to see why it failed
+            try:
+                debug_log_path = "/root/autodl-tmp/AgentMark2/AgentMark/dashboard/llm_debug.log"
+                with open(debug_log_path, "a", encoding="utf-8") as f:
+                    import datetime
+                    f.write(f"\\n--- [LLM PARSE FAILURE] {datetime.datetime.now().isoformat()} ---\\n")
+                    f.write(f"Raw Output: {raw_output}\\n")
+                    f.write("--------------------------------------------------\\n")
+            except Exception:
+                pass
+
             if fallback_actions:
                 uniform = 1.0 / len(fallback_actions)
                 probs = {a: uniform for a in fallback_actions}

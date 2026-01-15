@@ -34,6 +34,7 @@ export interface AddAgentStartResponse {
 export interface AddAgentTurnResponse {
     sessionId: string;
     step: any;
+    steps?: any[];
     promptTrace?: any;
     baselinePromptTrace?: any;
     watermark?: any;
@@ -156,7 +157,7 @@ export const api = {
     },
 
     addAgentStart: async (apiKey: string, repoUrl: string): Promise<AddAgentStartResponse> => {
-        const response = await axios.post(`${API_BASE}/api/add_agent/start`, { apiKey, repoUrl });
+        const response = await axios.post(`${API_BASE}/api/add_agent/init`, { apiKey, modelUrl: repoUrl });
         return response.data;
     },
 

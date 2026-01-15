@@ -63,6 +63,8 @@ class Message(BaseModel):
     role: str
     content: Optional[str] = None
     tool_call_id: Optional[str] = None
+    tool_calls: Optional[List[Any]] = None
+    name: Optional[str] = None
 
 
 def _message_to_dict(message: Message) -> Dict[str, Any]:
@@ -191,7 +193,7 @@ def _render_messages(messages: List[Dict[str, Any]]) -> str:
         if content is None:
             continue
         lines.append(f"{role}: {content}")
-    return "\n".join(lines)
+    return "\\n".join(lines)
 
 
 def _sanitize_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -257,7 +259,7 @@ def _inject_prompt(
     msgs.extend([_message_to_dict(m) for m in messages])
 
     if candidates:
-        user_lines = "候选动作：\n" + "\n".join(f"- {c}" for c in candidates)
+        user_lines = "候选动作：\\n" + "\\n".join(f"- {c}" for c in candidates)
         tool_lines = ""
         if tools:
             tool_specs = []
@@ -275,11 +277,11 @@ def _inject_prompt(
                     else:
                         tool_specs.append(f"- {name}(...)")
             if tool_specs:
-                tool_lines = "\n可用工具参数：\n" + "\n".join(tool_specs)
+                tool_lines = "\\n可用工具参数：\\n" + "\\n".join(tool_specs)
         # Append to last user message, or add new user message if none
         for m in reversed(msgs):
             if m["role"] == "user":
-                m["content"] = (m["content"] or "") + "\n" + user_lines + tool_lines
+                m["content"] = (m["content"] or "") + "\\n" + user_lines + tool_lines
                 break
         else:
             msgs.append({"role": "user", "content": user_lines + tool_lines})
@@ -289,16 +291,17 @@ def _inject_prompt(
             "未提供候选动作，请先生成一组合理的候选动作，并在 action_weights 中给出每个候选的概率。"
             "候选应为短语/动作名称，数量适中（3-8个）。"
         )
-        msgs[0]["content"] += "\n" + bootstrap_note
+        msgs[0]["content"] += "\\n" + bootstrap_note
     # Record mode inside first system for transparency
-    msgs[0]["content"] += f"\n[AgentMark mode={mode}]"
+    msgs[0]["content"] += f"\\n[AgentMark mode={mode}]"
     return msgs
 
 
-def _llm_client():
-    api_key = os.getenv("DEEPSEEK_API_KEY")
+def _llm_client(request_key: Optional[str] = None):
+    # Priority: Request Header > Env Var
+    api_key = request_key or os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
-        raise RuntimeError("DEEPSEEK_API_KEY not set.")
+        raise RuntimeError("DEEPSEEK_API_KEY not set and no Authorization header provided.")
     base_url = os.getenv("TARGET_LLM_BASE", DEFAULT_TARGET_BASE)
     return OpenAI(api_key=api_key, base_url=base_url)
 
@@ -542,7 +545,13 @@ def proxy_completion(req: CompletionRequest, request: Request):
             },
         )
 
-        client = _llm_client()
+        # Extract Key from Header
+        auth_header = request.headers.get("Authorization")
+        request_key = None
+        if auth_header and auth_header.startswith("Bearer "):
+            request_key = auth_header.split(" ", 1)[1]
+
+        client = _llm_client(request_key)
         target_model = _resolve_model(req.model)
         score_tools = None
         score_tool_choice = None
@@ -644,10 +653,11 @@ def proxy_completion(req: CompletionRequest, request: Request):
         resp_dict = final_resp.model_dump()
         if tool_mode == "proxy" and req.tools:
             tool_calls = _build_tool_calls(result["action"], result["action_args"])
-            if resp_dict.get("choices"):
-                resp_dict["choices"][0]["message"]["tool_calls"] = tool_calls
-                resp_dict["choices"][0]["finish_reason"] = "tool_calls"
-                resp_dict["choices"][0]["message"]["content"] = None
+            if tool_calls:
+                 if resp_dict.get("choices"):
+                    resp_dict["choices"][0]["message"]["tool_calls"] = tool_calls
+                    resp_dict["choices"][0]["finish_reason"] = "tool_calls"
+                    resp_dict["choices"][0]["message"]["content"] = None
             _debug_print(
                 "tool_calls_proxy",
                 {
