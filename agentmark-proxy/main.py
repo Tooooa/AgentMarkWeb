@@ -52,19 +52,21 @@ async def chat_completions(request: Request):
         
         print(f"[Proxy] Forwarding Top-K request to upstream...")
         
+
         # 3. Call Upstream LLM
-        upstream_response = await call_upstream(upstream_body)
+        auth_header = request.headers.get("Authorization")
+        upstream_response = await call_upstream(upstream_body, auth_header)
         
         # 4. Parse Candidates
         try:
             candidates, reasoning = parse_top_k_response(upstream_response) # Returns (list, reasoning)
         except Exception as e:
             print(f"[Proxy] Parsing failed: {e}. Fallback to original request.")
-            return await forward_request(body)
+            return await forward_request(body, auth_header)
             
         if not candidates:
             print("[Proxy] No candidates returned. Fallback to original request.")
-            return await forward_request(body)
+            return await forward_request(body, auth_header)
 
         # 5. Watermark Sampling
         # Identify Session (Simple: based on last message content hash)
@@ -117,17 +119,20 @@ async def chat_completions(request: Request):
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": str(e), "traceback": traceback.format_exc()})
 
-async def forward_request(body: dict):
+async def forward_request(body: dict, auth_header: str = None):
     """Forwards request transparently to upstream."""
     try:
-        response = await call_upstream(body) 
+        response = await call_upstream(body, auth_header) 
         return JSONResponse(content=response)
     except Exception as e:
         return JSONResponse(status_code=502, content={"error": f"Upstream failed: {str(e)}"})
 
-async def call_upstream(body: dict) -> dict:
+async def call_upstream(body: dict, auth_header: str = None) -> dict:
+    # Prefer passed auth_header, fallback to env var
+    token = auth_header or f"Bearer {UPSTREAM_API_KEY}"
+    
     headers = {
-        "Authorization": f"Bearer {UPSTREAM_API_KEY}",
+        "Authorization": token,
         "Content-Type": "application/json"
     }
     async with httpx.AsyncClient(timeout=60.0) as client:

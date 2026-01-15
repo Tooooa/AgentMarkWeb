@@ -220,61 +220,73 @@ npm run dev
 
 ---
 
-## 🔌 使用我们的插件
+## 🔌 通用插件集成 (Universal Usage)
 
-该流程用于验证：**用户输入（Add Agent 模式） → 网关做水印采样 → 工具调用执行**。
+AgentMark 提供了 **通用代理网关 (Universal Proxy)**，无需修改业务代码，即可让任何兼容 OpenAI 接口的 Agent 框架（如 AutoGPT, LangChain, Swarm, LiteLLM）一键接入水印。
 
-### Step 1：启动网关代理（AgentMark Proxy）
+**核心原理**：将 Agent 的 `OPENAI_API_BASE_URL` 指向我们的 Proxy。Proxy 会拦截请求，在工具选择阶段注入水印逻辑，然后转发给上游 LLM。
+
+### 1️⃣ 启动 AgentMark Proxy
+
+打开终端运行：
 
 ```bash
 cd AgentMark
 source ~/miniconda3/etc/profile.d/conda.sh && conda activate AgentMark
 
-export DEEPSEEK_API_KEY=sk-你的key
-export TARGET_LLM_MODEL=deepseek-chat
+# 配置
+export DEEPSEEK_API_KEY=sk-your-key           # 上游 API Key
+export TARGET_LLM_MODEL=deepseek-chat         # 上游模型
 export AGENTMARK_DEBUG=1
-export AGENTMARK_TOOL_MODE=proxy   # 网关构造 tool_calls
 
+# 启动 Proxy 服务 (端口 8001)
 uvicorn agentmark.proxy.server:app --host 0.0.0.0 --port 8001
 ```
 
-### Step 2：启动后端
+### 2️⃣ 启动可视化 Dashboard
+
+打开第二个终端：
 
 ```bash
 cd AgentMark
 conda activate AgentMark
+# 启动后端
 python dashboard/server/app.py
 ```
 
-### Step 3：启动前端（可视化）
+打开第三个终端：
 
 ```bash
-cd AgentMark
-cd dashboard
-npm install
-npm i @react-three/fiber @react-three/drei three
+cd AgentMark/dashboard
 npm run dev
+# Dashboard 地址 http://localhost:5173
 ```
 
-浏览器访问：`http://localhost:5173`
+### 3️⃣ 连接你的 Agent ("Add Agent" 模式)
 
-### Step 4：在前端使用 Add Agent 模式
+1.  打开 Dashboard `http://localhost:5173`。
+2.  在欢迎页选择 **Add Agent (添加 Agent)**。
+3.  **兼容性指引**：
+    *   **✅ 完美适配 (One-Click)**：`AutoGPT`, `Swarm`, `OpenAI Agents SDK`, `LangChain`, `LlamaIndex`, `LiteLLM`。
+    *   **❌ 不支持**：本地权重模型 (llama.cpp)，SaaS 网页版。
+4.  **集成方式**：
+    *   只需配置 Agent 环境，使其 Proxy 地址指向：`http://localhost:8001/v1`
+    *   或者直接使用 Dashboard 进行对话测试，它会自动走代理。
 
-- 打开浏览器进入 Dashboard。
-- 在欢迎页选择 **Add Agent** 模式。
-- 填入 API Key（DeepSeek/OpenAI）与可选的 Repo URL，然后发送消息。
+```bash
+# 示例：让标准 OpenAI SDK 走 Proxy
+export OPENAI_BASE_URL=http://localhost:8001/v1
+export OPENAI_API_KEY=any-dummy-key  # Proxy 会处理认证
+python your_agent_script.py
+```
 
-### Step 5：验证日志
+### 4️⃣ 验证水印
 
-在 **网关代理终端** 可看到：
+在 **Proxy 终端**，你会看到拦截日志：
+- `[agentmark:scoring_request]`: Proxy 注入评分 Prompt。
+- `[watermark]`: 在决策中嵌入水印信息。
 
-- `[agentmark:scoring_request]`：评分指令注入
-- `[agentmark:tool_calls_proxy]`：网关构造的工具调用（含参数）
-- `[watermark]`：水印结果与可视化数据
-
-在 **前端** 可查看会话与水印分布可视化。
-
-> 说明：网关从请求的 `tools` 参数中抽取候选工具并进行水印采样。
+在 **Dashboard**，你可以看到实时的水印分布可视化。
 
 ---
 

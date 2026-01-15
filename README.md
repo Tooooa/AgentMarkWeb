@@ -219,88 +219,73 @@ Visit `http://localhost:5173` or `http://127.0.0.1:5173` in your browser.
 
 ---
 
-## ✅ Using Our Plugin
+## 🔌 Universal Plugin Integration
 
-This flow validates the "tool calling + watermark sampling" plugin route: external agents don't modify business code, only change the endpoint address (OPENAI_BASE_URL).
+AgentMark provides a **Universal Proxy** that allows "one-click" watermark integration for any OpenAI-compatible agent framework (e.g., AutoGPT, LangChain, Swarm, LiteLLM) without modifying the agent's code.
 
-**Workflow**: **User input (Add Agent mode) → Gateway performs watermark sampling → Tool calls executed**.
+**Core Concept**: Point your agent's `OPENAI_API_BASE_URL` to our proxy. The proxy intercepts requests, injects watermark logic during tool selection, and forwards to the upstream LLM.
 
-### Step 1: Start Gateway Proxy (AgentMark Proxy)
+### 1️⃣ Start the AgentMark Proxy
 
-Open Terminal 1:
+Open a terminal and run:
 
-**Linux/macOS:**
 ```bash
 cd AgentMark
 source ~/miniconda3/etc/profile.d/conda.sh && conda activate AgentMark
 
-export DEEPSEEK_API_KEY=sk-your-key
-export TARGET_LLM_MODEL=deepseek-chat
+# Configuration
+export DEEPSEEK_API_KEY=sk-your-key           # Your upstream API Key
+export TARGET_LLM_MODEL=deepseek-chat         # Upstream model
 export AGENTMARK_DEBUG=1
-export AGENTMARK_TOOL_MODE=proxy   # Use "proxy constructs tool_calls" plugin mode
 
+# Start the Proxy Server (Port 8001)
 uvicorn agentmark.proxy.server:app --host 0.0.0.0 --port 8001
 ```
 
-**Windows PowerShell:**
-```powershell
-cd AgentMark
-conda activate AgentMark
+### 2️⃣ Start the Dashboard
 
-$env:DEEPSEEK_API_KEY="sk-your-key"
-$env:TARGET_LLM_MODEL="deepseek-chat"
-$env:AGENTMARK_DEBUG="1"
-$env:AGENTMARK_TOOL_MODE="proxy"
-
-uvicorn agentmark.proxy.server:app --host 0.0.0.0 --port 8001
-```
-
-### Step 2: Start Dashboard Backend
-
-Open Terminal 2:
+Open a second terminal:
 
 ```bash
 cd AgentMark
 conda activate AgentMark
+# Start Backend
 python dashboard/server/app.py
 ```
 
-### Step 3: Start Frontend (Visualization Dashboard)
-
-Open Terminal 3:
+Open a third terminal:
 
 ```bash
-cd AgentMark
-cd dashboard
-npm install  # Only needed first time
-npm i @react-three/fiber @react-three/drei three
+cd AgentMark/dashboard
 npm run dev
+# Dashboard available at http://localhost:5173
 ```
 
-Browser access: `http://localhost:5173`
+### 3️⃣ Connect Your Agent ("Add Agent" Mode)
 
-You can view sessions and watermark visualizations on the frontend.
+1.  Open the Dashboard at `http://localhost:5173`.
+2.  Select **Add Agent** on the welcome screen.
+3.  **Compatibility Guide**:
+    *   **✅ Perfect Match (One-Click)**: `AutoGPT`, `Swarm`, `OpenAI Agents SDK`, `LangChain`, `LlamaIndex`, `LiteLLM`.
+    *   **❌ Not Supported**: Local weight models (llama.cpp), SaaS Web interfaces.
+4.  **Integration**:
+    *   Simply configure your agent environment to use the proxy address: `http://localhost:8001/v1`
+    *   Or use the Dashboard's chat interface which automatically routes through the proxy for testing.
 
-### Step 4: Use Add Agent Mode in the Dashboard
+```bash
+# Example: Using standard OpenAI SDK with Proxy
+export OPENAI_BASE_URL=http://localhost:8001/v1
+export OPENAI_API_KEY=any-dummy-key  # Proxy handles auth
+python your_agent_script.py
+```
 
-- Open the dashboard in your browser.
-- Select **Add Agent** on the welcome screen.
-- Fill in your API key (DeepSeek/OpenAI) and optional repo URL, then send a message.
+### 4️⃣ Verify Watermark
 
-### Step 5: Verify Watermark Injection
+In the **Proxy Terminal**, you will see logs indicating successful interception:
+- `[agentmark:scoring_request]`: Proxy injecting scoring prompts.
+- `[watermark]`: Watermark bits embedded in the decision.
 
-In the **gateway proxy terminal** you should see:
-
-- `[agentmark:scoring_request]`: Scoring instruction injection
-- `[agentmark:tool_calls_proxy]`: Gateway-constructed tool calls (with parameters)
-- `[watermark]`: Watermark results and visualization data
-
-In the **frontend dashboard** you can:
-- View current session and conversation history
-- Visualize watermark distribution and statistics
-- Analyze watermark decoding results
-
-> **Note**: The gateway extracts candidate tools from the request's `tools` parameter and performs watermark sampling selection.
+In the **Dashboard**, you can see the real-time visualization of the watermark distribution.
 
 ---
 

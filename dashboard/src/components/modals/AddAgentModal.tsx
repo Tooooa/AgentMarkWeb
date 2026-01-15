@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, ChevronDown, ChevronUp, CheckCircle2, XCircle } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
 
 interface AddAgentModalProps {
@@ -21,6 +21,7 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
     const { locale } = useI18n();
     const [localRepoUrl, setLocalRepoUrl] = React.useState(repoUrl);
     const [localApiKey, setLocalApiKey] = React.useState(apiKey);
+    const [isCompatibilityOpen, setIsCompatibilityOpen] = useState(false);
 
     useEffect(() => {
         if (!isOpen) {
@@ -62,11 +63,11 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 10 }}
                             transition={{ type: "spring", duration: 0.4, bounce: 0.3 }}
-                            className="w-[640px] max-w-[95vw] bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100"
+                            className="w-[640px] max-w-[95vw] bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 max-h-[90vh] flex flex-col"
                             onClick={(e) => e.stopPropagation()}
                         >
                             {/* Header */}
-                            <div className="flex items-start justify-between px-8 pt-8 pb-4 bg-white">
+                            <div className="flex items-start justify-between px-8 pt-8 pb-4 bg-white shrink-0">
                                 <div className="flex items-center gap-4">
                                     <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600">
                                         <Plus size={24} strokeWidth={2.5} />
@@ -91,7 +92,7 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
                             </div>
 
                             {/* Content */}
-                            <div className="px-8 py-2 space-y-6">
+                            <div className="px-8 py-2 space-y-6 overflow-y-auto custom-scrollbar">
 
                                 {/* Info Box */}
                                 <div className="p-5 bg-indigo-50/80 rounded-2xl border border-indigo-100/50">
@@ -138,10 +139,62 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* Compatibility Guide */}
+                                <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                                    <button
+                                        onClick={() => setIsCompatibilityOpen(!isCompatibilityOpen)}
+                                        className="w-full px-5 py-3 bg-slate-50 flex items-center justify-between text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors"
+                                    >
+                                        <span>{locale === 'zh' ? '支持的 Agent 类型' : 'Supported Agent Types'}</span>
+                                        {isCompatibilityOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                    </button>
+                                    <AnimatePresence>
+                                        {isCompatibilityOpen && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <div className="p-5 bg-white border-t border-slate-200 space-y-4">
+                                                    <div>
+                                                        <h4 className="flex items-center gap-2 text-emerald-600 font-bold text-xs uppercase tracking-wider mb-2">
+                                                            <CheckCircle2 size={14} />
+                                                            {locale === 'zh' ? '完美适配 (One-Click)' : 'Generic Support (One-Click)'}
+                                                        </h4>
+                                                        <p className="text-xs text-slate-500 mb-2">
+                                                            {locale === 'zh' ? '只要支持修改 OpenAI Base URL 即可：' : 'Any agent supporting OpenAI Base URL configuration:'}
+                                                        </p>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            {['AutoGPT', 'OpenAI Swarm', 'OpenAI Agents SDK', 'LangChain', 'LlamaIndex', 'CrewAI', 'MetaGPT', 'LiteLLM'].map(agent => (
+                                                                <div key={agent} className="text-xs px-2 py-1 bg-emerald-50 text-emerald-700 rounded border border-emerald-100 text-center">
+                                                                    {agent}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="pt-2 border-t border-slate-100">
+                                                        <h4 className="flex items-center gap-2 text-rose-500 font-bold text-xs uppercase tracking-wider mb-2">
+                                                            <XCircle size={14} />
+                                                            {locale === 'zh' ? '暂不支持' : 'Not Supported'}
+                                                        </h4>
+                                                        <ul className="text-xs text-slate-500 space-y-1 list-disc pl-4">
+                                                            <li>{locale === 'zh' ? '本地权重直接加载 (llama.cpp, torch)' : 'Local weights direct loading (llama.cpp, torch)'}</li>
+                                                            <li>{locale === 'zh' ? 'SaaS 网页版 (ChatGPT Web, Claude Web)' : 'SaaS Web Interface (ChatGPT Web, Claude Web)'}</li>
+                                                            <li>{locale === 'zh' ? '非 OpenAI 协议 (Google Gemini SDK)' : 'Non-OpenAI Protocols (Google Gemini SDK)'}</li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
                             </div>
 
                             {/* Footer */}
-                            <div className="p-8 pt-4">
+                            <div className="p-8 pt-4 shrink-0 bg-white">
                                 <div className="flex items-center gap-3">
                                     <button
                                         onClick={onClose}

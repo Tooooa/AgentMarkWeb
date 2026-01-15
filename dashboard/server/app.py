@@ -4,6 +4,15 @@ import re
 import uuid
 import time
 import os
+
+# --- Fix for httpx/IPv6 issue ---
+# httpx/urlparse has issues with unbracketed IPv6 addresses in no_proxy (like ::1)
+# We strip them out to prevent ValueError: invalid literal for int() with base 10: ':1'
+if "no_proxy" in os.environ:
+    _proxies = os.environ["no_proxy"].split(",")
+    _sanitized = [p for p in _proxies if p.strip() != "::1"]
+    os.environ["no_proxy"] = ",".join(_sanitized)
+
 import asyncio
 import numpy as np
 from pathlib import Path
@@ -129,6 +138,7 @@ class Session:
         self.evaluation_result = None # Store evaluation result
 
 sessions: Dict[str, Session] = {}
+add_agent_sessions = {}
 
 # --- Swarm Plugin Mode ---
 
@@ -1034,6 +1044,42 @@ async def init_custom_session(req: CustomInitRequest):
     }
 
 
+# --- Swarm Wrapper for Parameter Injection ---
+
+class ParametersInjector:
+    def __init__(self, real_create, extra_body: Dict, temperature: float = 0.0):
+        self.real_create = real_create
+        self.extra_body = extra_body
+        self.temperature = temperature
+
+    def create(self, **kwargs):
+        # Inject our parameters
+        if self.extra_body:
+            existing_extra = kwargs.get("extra_body", {})
+            if existing_extra:
+                existing_extra.update(self.extra_body)
+                kwargs["extra_body"] = existing_extra
+            else:
+                kwargs["extra_body"] = self.extra_body
+        
+        # Enforce temperature
+        kwargs["temperature"] = self.temperature
+        
+        return self.real_create(**kwargs)
+
+class SwarmClientWrapper:
+    def __init__(self, client, extra_body: Dict):
+        self._client = client
+        self.chat = type('Chat', (), {})()
+        self.chat.completions = type('Completions', (), {})()
+        self.chat.completions.create = ParametersInjector(
+            client.chat.completions.create, 
+            extra_body
+        ).create
+    
+    def __getattr__(self, name):
+        return getattr(self._client, name)
+
 @app.post("/api/add_agent/start")
 async def start_add_agent_session(req: AddAgentInitRequest):
     session_id = f"agent_{int(time.time())}_{uuid.uuid4().hex[:6]}"
@@ -1075,7 +1121,14 @@ async def add_agent_turn(req: AddAgentTurnRequest):
         try:
             from swarm import Swarm
 
-            swarm_client = Swarm(client=_build_proxy_client(req.apiKey or session.api_key))
+            # Wrap the client to inject agentmark parameters
+            raw_client = _build_proxy_client(req.apiKey or session.api_key)
+            wrapped_client = SwarmClientWrapper(
+                raw_client, 
+                extra_body={"agentmark": agentmark_body}
+            )
+
+            swarm_client = Swarm(client=wrapped_client)
             completion = swarm_client.get_chat_completion(
                 agent=_get_swarm_add_agent(),
                 history=[{"role": "user", "content": req.message.strip()}],
@@ -1083,11 +1136,13 @@ async def add_agent_turn(req: AddAgentTurnRequest):
                 model_override=model_name,
                 stream=False,
                 debug=False,
-                extra_body={"agentmark": agentmark_body},
-                tools_override=ADD_AGENT_TOOLS,
-                temperature=0.0,
+                # extra_body={"agentmark": agentmark_body},  # Handled by wrapper
+                # tools_override=ADD_AGENT_TOOLS, # Swarm uses agent.functions
+                # temperature=0.0, # Handled by wrapper
             )
         except Exception as exc:
+            import traceback
+            traceback.print_exc()
             print(f"[WARN] Swarm bridge failed, falling back to direct call: {exc}")
 
     if completion is None:
@@ -1130,6 +1185,12 @@ async def add_agent_turn(req: AddAgentTurnRequest):
             print(f"[WARN] Baseline call failed: {exc}")
     watermark = _extract_watermark(completion)
     if not watermark:
+        print(f"[ERROR] Missing watermark! Completion: {completion}")
+        try:
+            print(f"[ERROR] Pydantic extra: {getattr(completion, '__pydantic_extra__', 'N/A')}")
+            print(f"[ERROR] Model extra: {getattr(completion, 'model_extra', 'N/A')}")
+        except:
+            pass
         raise HTTPException(status_code=500, detail="Missing watermark in response")
     completion_message = None
     try:
