@@ -1,11 +1,11 @@
 """
-Lightweight SDK wrapper for AgentMark's behavioral watermarking.
+AgentMark 行为水印的轻量级 SDK 包装器。
 
-Design goals:
-- Keep the public interface simple for external agents (select/decode).
-- Manage internal state (bit index, round).
-- Provide optional mock outputs for frontend integration.
-- Expose structured payloads for logging/visualization.
+设计目标：
+- 为外部代理保持简单的公共接口（选择/解码）。
+- 管理内部状态（位索引、轮次）。
+- 为前端集成提供可选的模拟输出。
+- 为日志记录/可视化暴露结构化载荷。
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ DEFAULT_PAYLOAD_BITS = "11001101" * 8  # 64 bits fallback
 
 @dataclass
 class WatermarkSampleResult:
-    """Structured output for a watermark sampling step."""
+    """水印采样步骤的结构化输出。"""
 
     action: str
     bits_embedded: int
@@ -45,9 +45,9 @@ class WatermarkSampleResult:
 
 class AgentWatermarker:
     """
-    Stateful wrapper around AgentMark's differential watermark sampler.
+    围绕 AgentMark 差分水印采样器的有状态包装器。
 
-    Typical usage:
+    典型用法：
         wm = AgentWatermarker(payload_text="team123")
         action, meta = wm.sample(probabilities, context="task||step", history=["obs1", ...])
         decoded_bits = wm.decode(probabilities, action, context="task||step")
@@ -77,7 +77,7 @@ class AgentWatermarker:
         self.algorithm = algorithm
 
     # ------------------------------------------------------------------ #
-    # Public API
+    # 公共 API
     # ------------------------------------------------------------------ #
     def sample(
         self,
@@ -88,13 +88,13 @@ class AgentWatermarker:
         round_num: Optional[int] = None,
     ) -> WatermarkSampleResult:
         """
-        Watermarked sampling.
+        带水印的采样。
 
         Args:
-            probabilities: Mapping from action -> probability/score (will be normalized).
-            context: Explicit context string for key generation.
-            history: Optional history fallback if context is empty.
-            round_num: Override internal round counter.
+            probabilities: 从动作到概率/分数的映射（将被归一化）。
+            context: 用于密钥生成的显式上下文字符串。
+            history: 如果上下文为空，可选的历史回退。
+            round_num: 覆盖内部轮次计数器。
 
         Returns:
             WatermarkSampleResult
@@ -118,7 +118,7 @@ class AgentWatermarker:
                 is_mock=True,
             )
 
-        # --- Real sampling via core algorithm ---
+        # --- 通过核心算法进行真实采样 ---
         selected_action, target_list, bits_cnt, context_used = sample_behavior_differential(
             probabilities=probs_norm,
             bit_stream=self._bit_stream,
@@ -157,7 +157,7 @@ class AgentWatermarker:
         round_num: Optional[int] = None,
     ) -> str:
         """
-        Decode bits from a selected action given the same probabilities and context.
+        在给定相同概率和上下文的情况下，从选定的动作中解码位。
         """
         probs_norm = self._normalize_probabilities(probabilities)
         round_used = self._round_num if round_num is None else round_num
@@ -171,7 +171,7 @@ class AgentWatermarker:
         )
 
     def reset(self) -> None:
-        """Reset internal bit index and round counter."""
+        """重置内部位索引和轮次计数器。"""
         self._bit_index = 0
         self._round_num = 0
 
@@ -184,7 +184,7 @@ class AgentWatermarker:
         return self._bit_index
 
     # ------------------------------------------------------------------ #
-    # Internal helpers
+    # 内部辅助函数
     # ------------------------------------------------------------------ #
     @staticmethod
     def _validate_bits(bits: str) -> str:
@@ -248,7 +248,7 @@ class AgentWatermarker:
         )
 
         if prob_new.sum() == 0:
-            # Degenerate case: return original distribution
+            # 退化情况：返回原始分布
             return [
                 {
                     "action": b,
@@ -274,8 +274,8 @@ class AgentWatermarker:
         selected_bin_start_index = bins[bin_indice_idx]
         bin_content_indices = indices_nonzero[selected_bin_start_index:]
 
-        # Watermarked per-action mass for the selected bin only.
-        # This reflects the conditional distribution after bin selection.
+        # 仅针对选定桶的每个动作的水印质量。
+        # 这反映了桶选择后的条件分布。
         watermarked = {b: 0.0 for b in behaviors}
         bin_mass = float(prob_new[bin_indice_idx].item())
         share = bin_mass / len(bin_content_indices) if len(bin_content_indices) > 0 else 0.0

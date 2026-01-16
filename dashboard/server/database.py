@@ -1,5 +1,5 @@
 """
-Database module for storing conversation history using SQLite.
+使用 SQLite 存储对话历史的数据库模块。
 """
 import sqlite3
 import json
@@ -14,7 +14,7 @@ class ConversationDB:
         self.init_db()
     
     def init_db(self):
-        """Initialize database schema"""
+        """初始化数据库模式"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -36,24 +36,24 @@ class ConversationDB:
             )
         """)
         
-        # Add is_pinned column if it doesn't exist (for existing databases)
+        # 如果不存在则添加 is_pinned 列（用于现有数据库）
         try:
             cursor.execute("ALTER TABLE conversations ADD COLUMN is_pinned INTEGER DEFAULT 0")
         except sqlite3.OperationalError:
             pass
         
-        # Add columns if they don't exist (for existing databases)
+        # 如果不存在则添加列（用于现有数据库）
         try:
             cursor.execute("ALTER TABLE conversations ADD COLUMN is_pinned INTEGER DEFAULT 0")
         except sqlite3.OperationalError:
-            pass  # Column already exists
+            pass  # 列已存在
 
         try:
             cursor.execute("ALTER TABLE conversations ADD COLUMN scenario_type TEXT DEFAULT 'benchmark'")
         except sqlite3.OperationalError:
-            pass  # Column already exists
+            pass  # 列已存在
         
-        # Create index for faster queries
+        # 创建索引以加快查询速度
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_created_at 
             ON conversations(created_at DESC)
@@ -63,14 +63,14 @@ class ConversationDB:
         conn.close()
     
     def save_conversation(self, conversation_data: Dict) -> str:
-        """Save or update a conversation"""
+        """保存或更新对话"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         conv_id = conversation_data.get("id")
         title = conversation_data.get("title", {})
         
-        # Handle title format
+        # 处理标题格式
         if isinstance(title, str):
             title_en = title
             title_zh = title
@@ -105,7 +105,7 @@ class ConversationDB:
         return conv_id
     
     def get_conversation(self, conv_id: str) -> Optional[Dict]:
-        """Get a single conversation by ID"""
+        """根据 ID 获取单个对话"""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -123,7 +123,7 @@ class ConversationDB:
         return self._row_to_dict(row)
     
     def list_conversations(self, limit: int = 100, search: str = None, type_filter: str = None) -> List[Dict]:
-        """List all conversations, pinned first, then newest first, with optional search and type filter"""
+        """列出所有对话，置顶优先，然后按最新排序，支持可选的搜索和类型过滤"""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -151,7 +151,7 @@ class ConversationDB:
         return [self._row_to_dict(row) for row in rows]
     
     def delete_conversation(self, conv_id: str) -> bool:
-        """Delete a conversation"""
+        """删除对话"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -164,7 +164,7 @@ class ConversationDB:
         return deleted
     
     def clear_all_conversations(self) -> int:
-        """Clear all conversation history"""
+        """清除所有对话历史"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -179,11 +179,11 @@ class ConversationDB:
         return count
     
     def toggle_pin(self, conversation_id: str) -> bool:
-        """Toggle pin status of a conversation"""
+        """切换对话的置顶状态"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Get current pin status
+        # 获取当前置顶状态
         cursor.execute("SELECT is_pinned FROM conversations WHERE id = ?", (conversation_id,))
         row = cursor.fetchone()
         
@@ -194,7 +194,7 @@ class ConversationDB:
         current_status = row[0]
         new_status = 0 if current_status else 1
         
-        # Update pin status
+        # 更新置顶状态
         cursor.execute(
             "UPDATE conversations SET is_pinned = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (new_status, conversation_id)
@@ -206,7 +206,7 @@ class ConversationDB:
         return True
     
     def _row_to_dict(self, row: sqlite3.Row) -> Dict:
-        """Convert database row to conversation dict"""
+        """将数据库行转换为对话字典"""
         steps = json.loads(row["steps_json"]) if row["steps_json"] else []
         evaluation = json.loads(row["evaluation_json"]) if row["evaluation_json"] else None
         
@@ -229,7 +229,7 @@ class ConversationDB:
         }
     
     def migrate_from_json(self, json_dir: Path):
-        """Migrate existing JSON files to database"""
+        """将现有 JSON 文件迁移到数据库"""
         if not json_dir.exists():
             return
         

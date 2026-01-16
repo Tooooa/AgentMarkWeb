@@ -1,6 +1,5 @@
 """
-Helpers for prompt-driven integrations where the LLM outputs action probabilities
-in JSON form (black-box API scenario).
+用于提示驱动集成的辅助函数，其中 LLM 以 JSON 形式输出动作概率（黑盒 API 场景）。
 """
 
 from __future__ import annotations
@@ -38,20 +37,20 @@ Requirements:
 
 
 def get_prompt_instruction() -> str:
-    """Return a tested prompt suffix to force LLM to emit JSON scores."""
+    """返回一个经过测试的提示后缀，强制 LLM 发出 JSON 分数。"""
     return PROMPT_INSTRUCTION
 
 
 def _find_json(text: str) -> Optional[str]:
     """
-    Best-effort extraction of the first JSON object from a string.
+    尽力从字符串中提取第一个 JSON 对象。
     """
     try:
         return json.dumps(json.loads(text))
     except Exception:
         pass
 
-    # Fallback: locate outermost braces
+    # 回退：定位最外层的大括号
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1 and end > start:
@@ -73,15 +72,15 @@ def _strip_code_fence(text: str) -> str:
 
 def extract_json_payload(raw_output: str) -> Dict:
     """
-    Robustly extract a JSON object from LLM output (handles code fences / loose text).
-    Returns {} on failure.
+    从 LLM 输出中稳健地提取 JSON 对象（处理代码围栏/松散文本）。
+    失败时返回 {}。
     """
     candidate = _strip_code_fence(raw_output)
     candidate = _find_json(candidate) or candidate
     try:
         return json.loads(candidate)
     except Exception:
-        # naive single-quote fix
+        # 简单的单引号修复
         try:
             fixed = candidate.replace("'", '"')
             return json.loads(fixed)
@@ -91,9 +90,9 @@ def extract_json_payload(raw_output: str) -> Dict:
 
 def parse_action_weights(raw_output: str) -> Dict[str, float]:
     """
-    Parse LLM text output to extract action_weights dict.
+    解析 LLM 文本输出以提取 action_weights 字典。
 
-    Returns an empty dict if parsing fails (caller should fallback to uniform).
+    如果解析失败，返回空字典（调用者应回退到均匀分布）。
     """
     data = extract_json_payload(raw_output)
     if not data:
@@ -103,7 +102,7 @@ def parse_action_weights(raw_output: str) -> Dict[str, float]:
     if not isinstance(weights, dict):
         return {}
 
-    # Only keep numeric values
+    # 仅保留数值
     result = {}
     for k, v in weights.items():
         try:
@@ -115,7 +114,7 @@ def parse_action_weights(raw_output: str) -> Dict[str, float]:
 
 def normalize_probabilities(probs: Dict[str, float]) -> Dict[str, float]:
     """
-    Normalize probability dict; drops non-positive totals by returning empty.
+    归一化概率字典；通过返回空字典来丢弃非正数总和。
     """
     total = float(sum(probs.values()))
     if total <= 0:
@@ -129,8 +128,8 @@ def normalize_probabilities(probs: Dict[str, float]) -> Dict[str, float]:
 
 def apply_temperature(probs: Dict[str, float], temperature: float) -> Dict[str, float]:
     """
-    Apply temperature scaling to soften or sharpen probabilities.
-    temperature > 1.0 -> flatter; temperature < 1.0 -> sharper.
+    应用温度缩放以软化或锐化概率。
+    temperature > 1.0 -> 更平坦；temperature < 1.0 -> 更尖锐。
     """
     if not probs:
         return probs
@@ -176,7 +175,7 @@ def _maybe_bias_uniform(
 
 
 def _getenv(name: str) -> Optional[str]:
-    # Local import for safety in reloaded contexts.
+    # 本地导入以确保在重新加载上下文中的安全性。
     import os as _os
 
     return _os.getenv(name)
@@ -214,7 +213,7 @@ def choose_action_from_prompt_output(
     probs = normalize_probabilities(weights)
 
     if not probs:
-        # Fallback: uniform over provided candidates (if any)
+        # 回退：在提供的候选上均匀分布（如果有）
         if fallback_actions:
             uniform = 1.0 / len(fallback_actions)
             probs = {a: uniform for a in fallback_actions}
@@ -240,14 +239,14 @@ def choose_action_from_prompt_output(
 
 class PromptWatermarkWrapper:
     """
-    High-level helper for prompt-driven integrations (black-box LLM).
+    用于提示驱动集成的高级辅助函数（黑盒 LLM）。
     """
 
     def __init__(self, wm: AgentWatermarker):
         self.wm = wm
 
     def get_instruction(self) -> str:
-        """Prompt suffix to force JSON probabilities."""
+        """强制 JSON 概率的提示后缀。"""
         return get_prompt_instruction()
 
     def process(
@@ -260,9 +259,9 @@ class PromptWatermarkWrapper:
         round_num: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
-        Parse LLM output -> normalize probs -> watermark sampling.
+        解析 LLM 输出 -> 归一化概率 -> 水印采样。
 
-        Returns a dict with action, action_args (if provided), probabilities_used, frontend_data, raw_payload.
+        返回包含 action、action_args（如果提供）、probabilities_used、frontend_data、raw_payload 的字典。
         """
         payload = extract_json_payload(raw_output)
         weights = {}

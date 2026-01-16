@@ -22,7 +22,7 @@ TOOL_DATA_ROOT = PROJECT_ROOT / "experiments/toolbench/data/data/toolenv/tools"
 
 
 def _load_root_dotenv() -> None:
-    """Best-effort loader for PROJECT_ROOT/.env without external deps."""
+    """尽力加载 PROJECT_ROOT/.env，无需外部依赖。"""
     env_path = PROJECT_ROOT / ".env"
     if not env_path.exists():
         return
@@ -41,7 +41,7 @@ def _load_root_dotenv() -> None:
                 continue
             os.environ.setdefault(key, value)
     except Exception:
-        # Avoid breaking server startup due to .env formatting issues.
+        # 避免因 .env 格式问题导致服务器启动失败。
         return
 
 
@@ -78,12 +78,12 @@ db = ConversationDB(db_path=str(PROJECT_ROOT / "dashboard/data/conversations.db"
 
 # --- Retriever Setup ---
 from dashboard.server.retriever import ToolBenchRetriever
-# from retriever import ToolBenchRetriever # If running from server dir? 
-# Better use relative or absolute if path is set.
-# Since app.py is in dashboard/server, 'import retriever' works if CWD is dashboard/server OR if dashboard/server is in path.
-# But we run from root usually.
-# If we run `python dashboard/server/app.py`, sys.path[0] is dashboard/server. So `import retriever` works.
-# But `agentmark` needs root in path.
+# from retriever import ToolBenchRetriever # 如果从 server 目录运行？
+# 如果设置了路径，最好使用相对或绝对路径。
+# 由于 app.py 在 dashboard/server 中，如果 CWD 是 dashboard/server 或者 dashboard/server 在路径中，'import retriever' 可以工作。
+# 但我们通常从根目录运行。
+# 如果我们运行 `python dashboard/server/app.py`，sys.path[0] 是 dashboard/server。所以 `import retriever` 可以工作。
+# 但 `agentmark` 需要根目录在路径中。
 
 from agentmark.environments.toolbench.adapter import ToolBenchAdapter
 retriever = None
@@ -94,7 +94,7 @@ async def init_retriever():
     retriever_loading = True
     print("[INFO] Background: Initializing ToolBench Retriever on CPU...")
     try:
-        # Run in thread to avoid blocking simple init
+        # 在线程中运行以避免阻塞简单初始化
         r = await asyncio.to_thread(ToolBenchRetriever, TOOL_DATA_ROOT, device="cpu")
         await asyncio.to_thread(r.load_model)
         await asyncio.to_thread(r.index_tools)
@@ -125,18 +125,18 @@ async def startup_event():
 # --- Simulation State ---
 
 class AgentState:
-    """Encapsulates the state for a single agent (Baseline or Watermarked)"""
+    """封装单个代理的状态（基线或带水印）"""
     def __init__(self, task_data: Dict, role: str):
-        self.role = role # 'baseline' or 'watermarked'
-        self.task = copy.deepcopy(task_data) # Deep copy to ensure independent modification
+        self.role = role # 'baseline' 或 'watermarked'
+        self.task = copy.deepcopy(task_data) # 深拷贝以确保独立修改
         
-        # ToolBench Adapter State
-        # For this demo, we use a simplified Adapter relying on LLM to propose JSON
+        # ToolBench 适配器状态
+        # 对于此演示，我们使用简化的适配器，依赖 LLM 提出 JSON
         self.adapter = ToolBenchAdapter(TOOL_DATA_ROOT)
         self.episode = self.adapter.prepare_episode(self.task)
         
-        # Execution History
-        self.trajectory = [] # List of {role, message}
+        # 执行历史
+        self.trajectory = [] # {role, message} 列表
         self.swarm_history: List[Dict[str, Any]] = []
         self.step_count = 0
         self.last_observation = ""
@@ -147,20 +147,20 @@ class Session:
         self.session_id = session_id
         self.start_time = time.time()
         
-        # Common Config
+        # 通用配置
         self.max_steps = 15
         
-        # Agent States
+        # 代理状态
         self.watermarked_state = AgentState(task_data, 'watermarked')
         self.baseline_state = AgentState(task_data, 'baseline')
         
-        # Payload / Watermark State (Only for watermarked agent)
-        self.bit_stream_str_raw = payload if payload else "1101" # Keep raw for reference
-        # Initialize RLNC
+        # 载荷 / 水印状态（仅用于带水印的代理）
+        self.bit_stream_str_raw = payload if payload else "1101" # 保留原始值以供参考
+        # 初始化 RLNC
         self.rlnc = DeterministicRLNC(self.bit_stream_str_raw)
         self.bit_index = 0
         
-        # LLM Client
+        # LLM 客户端
         self.client = OpenAI(
             api_key=api_key,
             base_url="https://api.deepseek.com"
@@ -170,19 +170,19 @@ class Session:
             base_url="https://api.deepseek.com"
         )
         self.model = "deepseek-chat"
-        self.evaluation_result = None # Store evaluation result
+        self.evaluation_result = None # 存储评估结果
 
 sessions: Dict[str, Session] = {}
 
 # --- Swarm Plugin Mode ---
 
 def get_weather(location: str, time: str = "now") -> str:
-    """Get the current weather in a given location. Location MUST be a city."""
+    """获取给定位置的当前天气。位置必须是城市。"""
     return json.dumps({"location": location, "temperature": "65", "time": time})
 
 
 def get_weather_forecast(location: str, days: str = "3") -> str:
-    """Get a short weather forecast for a given location and number of days."""
+    """获取给定位置和天数的短期天气预报。"""
     try:
         days_val = int(days)
     except Exception:
@@ -193,12 +193,12 @@ def get_weather_forecast(location: str, days: str = "3") -> str:
 
 
 def get_air_quality(location: str) -> str:
-    """Get a simple air quality report for a given location."""
+    """获取给定位置的简单空气质量报告。"""
     return json.dumps({"location": location, "aqi": 42, "status": "good"})
 
 
 def send_email(recipient: str, subject: str, body: str) -> str:
-    """Send a short email."""
+    """发送简短邮件。"""
     print("Sending email...")
     print(f"To: {recipient}")
     print(f"Subject: {subject}")
@@ -207,14 +207,14 @@ def send_email(recipient: str, subject: str, body: str) -> str:
 
 
 def send_sms(phone_number: str, message: str) -> str:
-    """Send a short SMS message to a phone number."""
+    """向电话号码发送简短短信。"""
     print("Sending sms...")
     print(f"To: {phone_number}")
     print(f"Message: {message}")
     return "Sent!"
 
 def get_top_rated_movies(limit: int = 10, min_imdb: float = 8.0) -> str:
-    """Return a list of top-rated movies with IMDb scores."""
+    """返回带有 IMDb 评分的顶级电影列表。"""
     return json.dumps(
         {
             "limit": limit,
@@ -229,7 +229,7 @@ def get_top_rated_movies(limit: int = 10, min_imdb: float = 8.0) -> str:
 
 
 def search_movies_by_genre(genre: str, limit: int = 10) -> str:
-    """Search movies by genre."""
+    """按类型搜索电影。"""
     return json.dumps(
         {
             "genre": genre,
@@ -240,7 +240,7 @@ def search_movies_by_genre(genre: str, limit: int = 10) -> str:
 
 
 def get_movie_summary(title: str) -> str:
-    """Fetch a short summary for a movie title."""
+    """获取电影标题的简短摘要。"""
     return json.dumps(
         {
             "title": title,
@@ -250,7 +250,7 @@ def get_movie_summary(title: str) -> str:
 
 
 def search_web(query: str) -> str:
-    """Search the web for general queries."""
+    """为一般查询搜索网络。"""
     return json.dumps({"query": query, "results": []})
 
 
@@ -976,7 +976,7 @@ class AddAgentEvaluateRequest(BaseModel):
 
 # --- Helpers ---
 def build_messages(query: str, tool_summaries: List[str], admissible_commands: List[str]) -> List[Dict]:
-    # Construct System Prompt compatible with ToolBench
+    # 构建与 ToolBench 兼容的系统提示
     sys_prompt = f"""You are an Auto-GPT agent. Result of your previous step is passed to you.
 You have access to the following tools:
 {json.dumps(tool_summaries, indent=2)}
@@ -993,11 +993,11 @@ If you have enough information, use "Finish" and provide the final answer in "ac
     ]
 
 def extract_and_normalize_probabilities(output: str, candidates: List[str]) -> Dict[str, float]:
-    # DeepSeek chat API doesn't expose logprobs in this demo.
-    # We therefore:
-    #   1) Prefer model-provided `action_weights` if present (normalized).
-    #   2) Otherwise, fall back to a biased-but-non-degenerate distribution (multiple "steps"),
-    #      to avoid the "one huge + many identical tiny" shape that collapses bins in the UI.
+    # DeepSeek chat API 在此演示中不暴露 logprobs。
+    # 因此我们：
+    #   1) 如果存在，优先使用模型提供的 `action_weights`（已归一化）。
+    #   2) 否则，回退到有偏但非退化的分布（多个"步骤"），
+    #      以避免"一个巨大 + 许多相同微小"的形状，这种形状会在 UI 中折叠桶。
 
     if not candidates:
         return {}
@@ -1024,8 +1024,8 @@ def extract_and_normalize_probabilities(output: str, candidates: List[str]) -> D
         return v if v > 0.0 else 0.0
 
     def _geometric_fallback(top_action: Optional[str]) -> Dict[str, float]:
-        # Biased-but-non-degenerate distribution: top_action gets fixed mass,
-        # the rest get a geometric decay so p2>p3>... (no flat plateau).
+        # 有偏但非退化的分布：top_action 获得固定质量，
+        # 其余获得几何衰减，使得 p2>p3>...（无平坦平台）。
         ratio = 0.75
 
         if top_action is not None and top_action in candidates:
@@ -1114,21 +1114,21 @@ def _parse_action_args_from_output(model_output: str, chosen: str) -> Dict[str, 
 async def init_session(req: InitRequest):
     session_id = f"sess_{int(time.time())}_{req.scenarioId}"
     
-    # Load Scenario Data
-    # In a real app, this would load from disk/db. 
-    # We will use the 'retriever' to find tools for the query if scenario query is custom?
-    # For fixed scenarios, we might already have the tool list. 
-    # Let's assume we retrieve dynamically for "Live" demo always, or use cached.
+    # 加载场景数据
+    # 在实际应用中，这将从磁盘/数据库加载。
+    # 如果场景查询是自定义的，我们将使用 'retriever' 来查找工具？
+    # 对于固定场景，我们可能已经有了工具列表。
+    # 让我们假设我们总是为"实时"演示动态检索，或使用缓存。
     
     task = {
         "query": "Solve task " + req.scenarioId, 
-        "api_list": [], # Will be empty, adapter handles fallback or we retrieve
+        "api_list": [], # 将为空，适配器处理回退或我们检索
         "id": req.scenarioId,
         "payload_str": req.payload 
     }
     
-    # Try retrieve real tools if we know the query? 
-    # For now, start empty or basic.
+    # 如果我们知道查询，尝试检索真实工具？
+    # 目前，从空或基本开始。
     
     api_key = _resolve_api_key(req.apiKey)
     session = Session(session_id, api_key, task, req.payload)
@@ -1142,7 +1142,7 @@ async def init_session(req: InitRequest):
             "query": task.get("query"),
             "id": req.scenarioId
         },
-        "totalSteps": 0, # Start
+        "totalSteps": 0, # 开始
         "payloadLength": len(req.payload) if req.payload else 16
     }
 
@@ -1221,7 +1221,7 @@ async def add_agent_turn(req: AddAgentTurnRequest):
         {"role": "user", "content": req.message.strip()},
     ]
 
-    # Define synchronous tasks for parallel execution
+    # 定义同步任务以并行执行
     def run_watermarked_model():
         w_start = time.time()
         w_completion = None
@@ -1229,30 +1229,30 @@ async def add_agent_turn(req: AddAgentTurnRequest):
         if use_swarm:
             try:
                 from swarm import Swarm
-                # Use run_and_stream to get authentic flow (even if tools not executable here)
-                # Note: AddAgent mode typically just predicts the *next* step (scoring).
-                # But if we want to support multi-turn auto-regressive, we need executable tools.
-                # Current setup likely has no executable tools, so it will stop at ToolCall.
+                # 使用 run_and_stream 以获得真实流程（即使工具在此处不可执行）
+                # 注意：AddAgent 模式通常只预测*下一步*（评分）。
+                # 但如果我们想支持多轮自回归，我们需要可执行工具。
+                # 当前设置可能没有可执行工具，因此它会在 ToolCall 处停止。
                 
                 swarm_client = Swarm(client=_build_proxy_client(req.apiKey or session.api_key))
                 
-                # We need to construct a Mock Agent object 
+                # 我们需要构造一个模拟代理对象
                 from swarm import Agent
                 ephemeral_agent = Agent(name="AddAgent", model=model_name, instructions=ADD_AGENT_SYSTEM_PROMPT)
                 
-                # Standard Swarm run (handles loop if tools executable, else one turn)
-                # Since we don't have python functions for ADD_AGENT_TOOLS, we pass them as tools_schema only?
-                # Swarm requires 'functions' list of callables for execute_tools=True.
-                # If we pass 'tools_override', Swarm uses that for the API call schema.
-                # But execution will fail if 'functions' is empty and 'execute_tools=True'.
-                # So we MUST set execute_tools=False to prevent Swarm from trying to call non-existent functions.
-                # This means it will behave just like get_chat_completion (single turn).
-                # This CONFIRMS "Add Agent" acts as a predictor, not a runner.
-                # I will preserve this behavior but use `run` interface for consistency if desired, 
-                # OR realize that for "Add Agent", single turn IS the authentic flow for this tool.
+                # 标准 Swarm 运行（如果工具可执行则处理循环，否则一轮）
+                # 由于我们没有 ADD_AGENT_TOOLS 的 Python 函数，我们只将它们作为 tools_schema 传递？
+                # Swarm 需要可调用对象的 'functions' 列表用于 execute_tools=True。
+                # 如果我们传递 'tools_override'，Swarm 将其用于 API 调用模式。
+                # 但如果 'functions' 为空且 'execute_tools=True'，执行将失败。
+                # 所以我们必须设置 execute_tools=False 以防止 Swarm 尝试调用不存在的函数。
+                # 这意味着它的行为就像 get_chat_completion（单轮）。
+                # 这确认了"Add Agent"充当预测器，而不是运行器。
+                # 如果需要，我将保留此行为但使用 `run` 接口以保持一致性，
+                # 或者意识到对于"Add Agent"，单轮确实是此工具的真实流程。
                 
-                # However, to satisfy "Authentic Swarm Flow", I will use `run` but with `execute_tools=False`.
-                # This ensures Swarm's internal prompt/message logic is used.
+                # 但是，为了满足"真实 Swarm 流程"，我将使用 `run` 但设置 `execute_tools=False`。
+                # 这确保使用 Swarm 的内部提示/消息逻辑。
                 
                 response = swarm_client.run(
                     agent=ephemeral_agent,
@@ -1261,12 +1261,12 @@ async def add_agent_turn(req: AddAgentTurnRequest):
                     model_override=model_name,
                     stream=False,
                     debug=True,
-                    # extra_body={"agentmark": agentmark_body}, # Swarm run doesn't support extra_body
+                    # extra_body={"agentmark": agentmark_body}, # Swarm run 不支持 extra_body
                     tools_override=ADD_AGENT_TOOLS,
                     execute_tools=False
                 )
                 
-                # Wrap response to match ChatCompletion interface expected by downstream
+                # 包装响应以匹配下游期望的 ChatCompletion 接口
                 class MockChoice:
                     def __init__(self, msg): self.message = msg
                 class MockCompletion:
@@ -1288,7 +1288,7 @@ async def add_agent_turn(req: AddAgentTurnRequest):
                     temperature=0.0,
                 )
             except Exception as exc:
-                # Raise to be caught by asyncio gather
+                # 抛出异常以被 asyncio gather 捕获
                 raise exc
         
         w_latency = time.time() - w_start
@@ -1321,23 +1321,23 @@ async def add_agent_turn(req: AddAgentTurnRequest):
         
         return b_step, b_trace
 
-    # Execute in parallel
+    # 并行执行
     futures = [asyncio.to_thread(run_watermarked_model)]
     if use_baseline:
         futures.append(asyncio.to_thread(run_baseline_model))
     
     results = await asyncio.gather(*futures, return_exceptions=True)
 
-    # Process Watermarked Result
+    # 处理带水印的结果
     if isinstance(results[0], Exception):
         exc = results[0]
-        # Re-raise strictly as 502 if it was a proxy connection issue, or generic 500
+        # 如果是代理连接问题，严格重新抛出为 502，否则为通用 500
         detail = f"Proxy call failed ({proxy_base}): {exc}"
         raise HTTPException(status_code=502, detail=detail)
     
     completion, latency = results[0]
 
-    # Process Baseline Result
+    # 处理基线结果
     baseline_step = None
     baseline_prompt_trace = None
     if use_baseline:
@@ -1523,27 +1523,27 @@ async def evaluate_add_agent(req: AddAgentEvaluateRequest):
 
 @app.post("/api/add_agent/{session_id}/save")
 async def save_add_agent_session(session_id: str):
-    """Save an Add Agent session to history"""
+    """将 Add Agent 会话保存到历史记录"""
     if session_id not in add_agent_sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     
     try:
         sess = add_agent_sessions[session_id]
         
-        # Combine watermarked and baseline into a unified view for history
-        # For simple history viewing, we can just save the 'steps' structure used in UI
-        # We need to construct 'steps' list similar to what AddAgentDashboard maintains
+        # 将带水印和基线合并为统一的历史视图
+        # 对于简单的历史查看，我们可以只保存 UI 中使用的 'steps' 结构
+        # 我们需要构造类似于 AddAgentDashboard 维护的 'steps' 列表
         
-        # Actually, AddAgentDashboard maintains 'steps' state. 
-        # But we only have raw trajectory here in session.
-        # However, sess.watermarked_trajectory contains structured thought/action.
+        # 实际上，AddAgentDashboard 维护 'steps' 状态。
+        # 但我们在这里只有会话中的原始轨迹。
+        # 然而，sess.watermarked_trajectory 包含结构化的思考/动作。
         
-        # BETTER APPROACH: The frontend already has the full 'steps' state array.
-        # It's better to let frontend call 'save_scenario' with the data it has,
-        # specifying type='add_agent'.
-        # We don't need a special backend reconstruction logic if frontend sends the data.
+        # 更好的方法：前端已经有了完整的 'steps' 状态数组。
+        # 最好让前端使用它拥有的数据调用 'save_scenario'，
+        # 指定 type='add_agent'。
+        # 如果前端发送数据，我们不需要特殊的后端重构逻辑。
         
-        # SO, we will skip complex logic here and just rely on frontend using the generic save API.
+        # 因此，我们将跳过这里的复杂逻辑，只依赖前端使用通用保存 API。
         pass
     except Exception as e:
         print(f"[ERROR] Save add agent failed: {e}")
@@ -1554,7 +1554,7 @@ async def save_add_agent_session(session_id: str):
 
 @app.get("/api/scenarios")
 async def list_scenarios(search: Optional[str] = None, limit: int = 100, type: Optional[str] = None):
-    """List all saved conversations from database with optional search and type filter"""
+    """列出数据库中所有保存的对话，支持可选的搜索和类型过滤"""
     try:
         scenarios = db.list_conversations(limit=limit, search=search, type_filter=type)
         return scenarios
@@ -1565,12 +1565,12 @@ async def list_scenarios(search: Optional[str] = None, limit: int = 100, type: O
 class SaveScenarioRequest(BaseModel):
     title: Any # str or dict
     data: Dict
-    id: Optional[str] = None # Optional ID to overwrite
-    type: Optional[str] = "benchmark" # Default to benchmark
+    id: Optional[str] = None # 可选的 ID 以覆盖
+    type: Optional[str] = "benchmark" # 默认为 benchmark
 
 @app.post("/api/save_scenario")
 async def save_scenario(req: SaveScenarioRequest):
-    """Save conversation to database"""
+    """将对话保存到数据库"""
     try:
         scenario_id = req.id if req.id else str(uuid.uuid4())
         
@@ -1578,13 +1578,13 @@ async def save_scenario(req: SaveScenarioRequest):
         scenario_data["id"] = scenario_id
         scenario_data["type"] = req.type
         
-        # Handle title format
+        # 处理标题格式
         if isinstance(req.title, str):
             scenario_data["title"] = {"en": req.title, "zh": req.title}
         else:
             scenario_data["title"] = req.title
         
-        # Save to database
+        # 保存到数据库
         db.save_conversation(scenario_data)
         
         print(f"[INFO] Saved scenario {scenario_id} to database")
@@ -1595,7 +1595,7 @@ async def save_scenario(req: SaveScenarioRequest):
 
 @app.delete("/api/scenarios/clear_all")
 async def clear_all_history():
-    """Clear all conversation history from database"""
+    """清除数据库中的所有对话历史"""
     try:
         deleted_count = db.clear_all_conversations()
         print(f"[INFO] Cleared all history: {deleted_count} conversations deleted")
@@ -1606,7 +1606,7 @@ async def clear_all_history():
 
 @app.post("/api/scenarios/batch_delete")
 async def batch_delete_scenarios(req: dict):
-    """Batch delete multiple scenarios"""
+    """批量删除多个场景"""
     try:
         scenario_ids = req.get("ids", [])
         if not scenario_ids:
@@ -1625,7 +1625,7 @@ async def batch_delete_scenarios(req: dict):
 
 @app.post("/api/scenarios/{scenario_id}/toggle_pin")
 async def toggle_pin_scenario(scenario_id: str):
-    """Toggle pin status of a conversation"""
+    """切换对话的置顶状态"""
     try:
         success = db.toggle_pin(scenario_id)
         if success:
@@ -1641,7 +1641,7 @@ async def toggle_pin_scenario(scenario_id: str):
 
 @app.delete("/api/scenarios/{scenario_id}")
 async def delete_scenario(scenario_id: str):
-    """Delete a conversation from database"""
+    """从数据库中删除对话"""
     try:
         deleted = db.delete_conversation(scenario_id)
         if deleted:
@@ -1657,13 +1657,13 @@ async def delete_scenario(scenario_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 class GenerateTitleRequest(BaseModel):
-    history: List[Dict] # List of {role, content/message}
+    history: List[Dict] # {role, content/message} 列表
 
 @app.post("/api/generate_title")
 async def generate_title(req: GenerateTitleRequest):
     try:
-        # Extract user messages to summarize
-        # Limit to first few turns for title generation
+        # 提取用户消息以进行摘要
+        # 限制为前几轮以生成标题
         conversation_text = ""
         for turn in req.history[:6]:
             role = turn.get("role", "")
@@ -1676,21 +1676,21 @@ async def generate_title(req: GenerateTitleRequest):
         if not conversation_text:
             return {"title": "New Conversation"}
 
-        # Use a quick call to generate title
-        # We can use the same client
-        # Create a temporary client if needed, or reuse one from a session if available?
-        # We don't have a session ID here necessarily.
-        # But we initialized 'sessions' with keys. We can just instantiate a generic client.
-        # However, to avoid global client init if not needed, we can just pick one active session or init a temporary one.
-        # OR better: init a global client for utility tasks.
+        # 使用快速调用来生成标题
+        # 我们可以使用相同的客户端
+        # 如果需要，创建临时客户端，或重用会话中的客户端（如果可用）？
+        # 我们这里不一定有会话 ID。
+        # 但我们用键初始化了 'sessions'。我们可以只实例化一个通用客户端。
+        # 但是，为了避免不必要的全局客户端初始化，我们可以选择一个活动会话或初始化一个临时会话。
+        # 或者更好：为实用任务初始化全局客户端。
         
-        # NOTE: In this demo, we assume we have an API Key.
-        # But this request comes from frontend. Does it have API Key?
-        # The frontend might not pass API key here if it's "auto save".
-        # We should ideally pass API Key in request or reuse global environment variable.
-        # For this demo, let's assume we reuse a valid API key from any active session or environment.
-        # If no active session, we might fail.
-        # Let's check if we have any active session to steal credentials or use a default if configured.
+        # 注意：在此演示中，我们假设我们有 API 密钥。
+        # 但此请求来自前端。它有 API 密钥吗？
+        # 如果是"自动保存"，前端可能不会在这里传递 API 密钥。
+        # 理想情况下，我们应该在请求中传递 API 密钥或重用全局环境变量。
+        # 对于此演示，让我们假设我们重用任何活动会话或环境中的有效 API 密钥。
+        # 如果没有活动会话，我们可能会失败。
+        # 让我们检查是否有任何活动会话可以获取凭据，或使用配置的默认值。
         
         api_key = None
         if sessions:
@@ -1730,76 +1730,76 @@ class RestoreSessionRequest(BaseModel):
 
 @app.post("/api/restore_session")
 async def restore_session(req: RestoreSessionRequest):
-    """Restore session from database"""
+    """从数据库恢复会话"""
     print(f"[INFO] Restore session request for scenarioId: {req.scenarioId}")
     
-    # 1. Load saved scenario from database
+    # 1. 从数据库加载保存的场景
     data = db.get_conversation(req.scenarioId)
     
     if not data:
         print(f"[ERROR] Scenario {req.scenarioId} not found in database")
-        # List all available conversations for debugging
+        # 列出所有可用对话以供调试
         all_convs = db.list_conversations(limit=10)
         print(f"[INFO] Available conversations: {[c['id'] for c in all_convs]}")
         raise HTTPException(status_code=404, detail="Saved scenario not found")
     
     print(f"[INFO] Found scenario in database: {data.get('id')}, steps: {len(data.get('steps', []))}")
 
-    # 2. Init Session
+    # 2. 初始化会话
     session_id = f"sess_{int(time.time())}_{req.scenarioId}_restored"
     
-    # Extract task details from saved data
-    # Saved data has 'steps', 'userQuery', etc.
+    # 从保存的数据中提取任务详情
+    # 保存的数据有 'steps'、'userQuery' 等
     task = {
         "query": data.get("userQuery") or "Restored Task",
-        "api_list": [], # We will rely on retrieval for next steps or assume stateless
+        "api_list": [], # 我们将依赖检索进行下一步或假设无状态
         "id": req.scenarioId,
         "payload_str": data.get("payload") or "11001101"
     }
     
-    # 3. Create Session
+    # 3. 创建会话
     api_key = _resolve_api_key(req.apiKey)
     session = Session(session_id, api_key, task, task["payload_str"])
     
-    # 4. Reconstruct Trajectory from Steps
-    # This is "best effort" mapping from UI-steps to internal-trajectory
-    # UI Step Types: 'user_input', 'thought' (with action/tool), 'tool', 'finish'
+    # 4. 从步骤重构轨迹
+    # 这是从 UI 步骤到内部轨迹的"尽力而为"映射
+    # UI 步骤类型：'user_input'、'thought'（带动作/工具）、'tool'、'finish'
     
     watermarked_trajectory = []
     baseline_trajectory = []
     
     steps = data.get("steps", [])
     
-    # We need to map steps to (User, Assistant, Tool) messages.
-    # Logic:
-    # - if stepType == 'user_input': -> User Message
-    # - if stepType == 'thought' or 'finish': -> Assistant Message (reconstruct JSON)
-    # - if stepType == 'tool': -> Tool Message (Observation)
+    # 我们需要将步骤映射到（用户、助手、工具）消息。
+    # 逻辑：
+    # - 如果 stepType == 'user_input'：-> 用户消息
+    # - 如果 stepType == 'thought' 或 'finish'：-> 助手消息（重构 JSON）
+    # - 如果 stepType == 'tool'：-> 工具消息（观察）
     
-    # Let's iterate and reconstruct
+    # 让我们迭代并重构
     for step in steps:
         s_type = step.get("stepType", "thought")
         
         if s_type == "user_input":
-            # User messages are the same for both agents
+            # 用户消息对两个代理都相同
             user_msg = {"role": "user", "message": step.get("thought") or step.get("action")}
             watermarked_trajectory.append(user_msg)
             baseline_trajectory.append(user_msg)
             
         elif s_type in ["thought", "finish", "tool"]:
-            # Reconstruct Watermarked Agent's messages
+            # 重构带水印代理的消息
             thought = step.get("thought", "")
             action = step.get("action", "")
             final_answer = step.get("finalAnswer")
             
-            # Helper to parse "Call: ToolName" -> ToolName
+            # 辅助函数解析 "Call: ToolName" -> ToolName
             chosen_tool = "Finish"
             if action.startswith("Call: "):
                 chosen_tool = action.replace("Call: ", "").strip()
             elif action == "Finish":
                 chosen_tool = "Finish"
             
-            # Reconstruct Dict for watermarked agent
+            # 为带水印代理重构字典
             model_out_dict = {
                 "action": chosen_tool,
                 "action_args": {},
@@ -1809,29 +1809,29 @@ async def restore_session(req: RestoreSessionRequest):
             if chosen_tool == "Finish" and final_answer:
                  model_out_dict["action_args"] = { "final_answer": final_answer }
             
-            # Store as string (mocking the LLM raw output)
+            # 存储为字符串（模拟 LLM 原始输出）
             watermarked_trajectory.append({"role": "assistant", "message": json.dumps(model_out_dict)})
             
-            # Add observation for watermarked agent
+            # 为带水印代理添加观察
             obs = step.get("toolDetails") or step.get("observation")
             if obs and chosen_tool != "Finish":
                 watermarked_trajectory.append({"role": "tool", "message": obs})
             
-            # Reconstruct Baseline Agent's messages (if exists)
+            # 重构基线代理的消息（如果存在）
             baseline_data = step.get("baseline")
             if baseline_data:
                 baseline_thought = baseline_data.get("thought", "")
                 baseline_action = baseline_data.get("action", "")
                 baseline_final_answer = baseline_data.get("finalAnswer")
                 
-                # Parse baseline action
+                # 解析基线动作
                 baseline_tool = "Finish"
                 if baseline_action.startswith("Call: "):
                     baseline_tool = baseline_action.replace("Call: ", "").strip()
                 elif baseline_action == "Finish":
                     baseline_tool = "Finish"
                 
-                # Reconstruct Dict for baseline agent
+                # 为基线代理重构字典
                 baseline_model_dict = {
                     "action": baseline_tool,
                     "action_args": {},
@@ -1843,25 +1843,25 @@ async def restore_session(req: RestoreSessionRequest):
                 
                 baseline_trajectory.append({"role": "assistant", "message": json.dumps(baseline_model_dict)})
                 
-                # Add observation for baseline agent
+                # 为基线代理添加观察
                 baseline_obs = baseline_data.get("toolDetails") or baseline_data.get("observation")
                 if baseline_obs and baseline_tool != "Finish":
                     baseline_trajectory.append({"role": "tool", "message": baseline_obs})
             else:
-                # If no baseline data, copy watermarked data
+                # 如果没有基线数据，复制带水印的数据
                 baseline_trajectory.append({"role": "assistant", "message": json.dumps(model_out_dict)})
                 if obs and chosen_tool != "Finish":
                     baseline_trajectory.append({"role": "tool", "message": obs})
 
-    # Hydrate both agents with their respective trajectories
+    # 用各自的轨迹填充两个代理
     session.watermarked_state.trajectory = watermarked_trajectory
     session.baseline_state.trajectory = baseline_trajectory
     
-    # Set step count
+    # 设置步数
     session.watermarked_state.step_count = len(steps)
     session.baseline_state.step_count = len(steps)
     
-    # Store session
+    # 存储会话
     sessions[session_id] = session
     
     print(f"[INFO] Restored session {session_id} with {len(watermarked_trajectory)} watermarked turns and {len(baseline_trajectory)} baseline turns.")
@@ -1884,16 +1884,16 @@ async def continue_session(req: ContinueRequest):
     
     sess = sessions[req.sessionId]
     
-    # Retrieve new tools for the continuation prompt
+    # 为继续提示检索新工具
     print(f"\n[INFO] >>> RECEIVED CONTINUE PROMPT: '{req.prompt}' <<<\n")
     if retriever:
         new_tools = retriever.retrieve(req.prompt, top_k=5)
         if new_tools:
             print(f"[INFO] Retrieved {len(new_tools)} new tools for continuation.")
             
-            # Helper to update agent state with new tools
+            # 辅助函数用新工具更新代理状态
             def update_agent_tools(agent_state: AgentState):
-                # Basic dedup check
+                # 基本去重检查
                 current_tools = agent_state.task.get("api_list", [])
                 existing_names = {t.get("func_name") or t.get("api_name") for t in current_tools}
                 
@@ -1905,7 +1905,7 @@ async def continue_session(req: ContinueRequest):
                 
                 agent_state.task["api_list"] = current_tools
                 
-                # CRITICAL: Re-initialize episode to refresh tool summaries and admissible commands
+                # 关键：重新初始化 episode 以刷新工具摘要和可接受命令
                 try:
                     updated_episode = agent_state.adapter.prepare_episode(agent_state.task)
                     agent_state.episode["tool_summaries"] = updated_episode["tool_summaries"]
@@ -1913,20 +1913,20 @@ async def continue_session(req: ContinueRequest):
                 except Exception as e:
                     print(f"[ERROR] Failed to refresh episode context for {agent_state.role}: {e}")
 
-            # Update both agents
+            # 更新两个代理
             update_agent_tools(sess.watermarked_state)
             update_agent_tools(sess.baseline_state)
             print("[INFO] Updated tools for both agents.")
             
     
-    # Append user prompt to trajectory for both
+    # 为两者追加用户提示到轨迹
     sess.watermarked_state.trajectory.append({"role": "user", "message": req.prompt})
     sess.baseline_state.trajectory.append({"role": "user", "message": req.prompt})
     
-    # Extend max steps to allow continuation
+    # 扩展最大步数以允许继续
     sess.max_steps += 10
     
-    # CRITICAL: Reset done state so agents continue
+    # 关键：重置完成状态以便代理继续
     sess.watermarked_state.done = False
     sess.baseline_state.done = False
     
@@ -1944,7 +1944,7 @@ async def step_session(req: StepRequest):
     #     use_swarm_baseline = False
     
     if sess.watermarked_state.step_count >= sess.max_steps:
-        # Return immediate JSON for consistency if done
+        # 如果完成，立即返回 JSON 以保持一致性
         def immediate_done():
             yield json.dumps({
                 "type": "result",
@@ -1985,7 +1985,7 @@ async def step_session(req: StepRequest):
     ):
         step_start_time = time.time()
         
-        # Check done state
+        # 检查完成状态
         if agent_state.done:
             final_data = {
                 "agent": agent_state.role,
@@ -2013,24 +2013,24 @@ async def step_session(req: StepRequest):
             return final_data, None, 0, shared_payload
 
             try:
-                # Swarm Native Execution (Threaded for Sync Client)
+                # Swarm 原生执行（为同步客户端线程化）
                 
-                # 1. Define Dynamic Tool Wrapper Factory
+                # 1. 定义动态工具包装器工厂
                 def make_wrapper(tool_def, adapter, task_state, queue, loop, agent_role):
                     tool_name = tool_def["name"]
                     
                     def wrapper(**kwargs):
-                        # Side-effect: Notify UI of tool call start
-                        # This happens sync inside Swarm's loop (blocking the thread, not the main loop)
-                        # We use call_soon_threadsafe to push to async queue
+                        # 副作用：通知 UI 工具调用开始
+                        # 这在 Swarm 循环内同步发生（阻塞线程，而不是主循环）
+                        # 我们使用 call_soon_threadsafe 推送到异步队列
                         
                         tool_display = f"Call: {tool_name}"
                         call_details = json.dumps(kwargs, ensure_ascii=False)
                         
-                        # Notify UI: Tool Call Intent (as a Thought or special event)
-                        # Since Swarm doesn't yield "I am calling X" in the stream until after? 
-                        # Actually Swarm streams content, then executes tool.
-                        # We inject a specific event to show the tool call card immediately.
+                        # 通知 UI：工具调用意图（作为思考或特殊事件）
+                        # 由于 Swarm 在流中直到之后才产生"我正在调用 X"？
+                        # 实际上 Swarm 流式传输内容，然后执行工具。
+                        # 我们注入特定事件以立即显示工具调用卡片。
                         
                         loop.call_soon_threadsafe(
                              queue.put_nowait,

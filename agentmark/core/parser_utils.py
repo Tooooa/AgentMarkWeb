@@ -155,70 +155,70 @@ def extract_and_normalize_probabilities(response_text, admissible_commands, logg
         >>> extract_and_normalize_probabilities(response, commands)
         {'go to cabinet 1': 0.3, 'take soapbar 1': 0.7, 'open cabinet 1': 0.0}
     """
-    # Try extracting probabilities
+    # 尝试提取概率
     extracted = extract_probabilities(response_text, admissible_commands)
     
-    # Strategy 1: full extraction and normalization
+    # 策略 1：完全提取并归一化
     if extracted and len(extracted) == len(admissible_commands):
         total = sum(extracted.values())
         if total > 0:
             normalized = {k: v / total for k, v in extracted.items()}
             if logger:
-                logger.debug(f"Extracted and normalized all {len(extracted)} probabilities")
+                logger.debug(f"提取并归一化了所有 {len(extracted)} 个概率")
             return normalized
         else:
-            # All probabilities are 0; use uniform distribution
+            # 所有概率都为 0；使用均匀分布
             if logger:
-                logger.warning("Sum of extracted probabilities is 0; using uniform fallback")
+                logger.warning("提取的概率总和为 0；使用均匀分布回退")
             uniform_prob = 1.0 / len(admissible_commands)
             return {cmd: uniform_prob for cmd in admissible_commands}
     
-    # Strategy 2: partial normalization, missing set to 0
+    # 策略 2：部分归一化，缺失的设为 0
     elif extracted and len(extracted) > 0:
         if logger:
             logger.warning(
-                f"Only extracted {len(extracted)}/{len(admissible_commands)} probabilities; "
-                "using partial normalization"
+                f"仅提取了 {len(extracted)}/{len(admissible_commands)} 个概率；"
+                "使用部分归一化"
             )
         
-        # Check actions not in admissible list (filtered out)
+        # 检查不在可接受列表中的动作（已过滤）
         filtered_actions = {k: v for k, v in extracted.items() if k not in admissible_commands}
         if filtered_actions and logger:
-            logger.warning(f"LLM actions not in admissible list (filtered): {filtered_actions}")
+            logger.warning(f"LLM 动作不在可接受列表中（已过滤）: {filtered_actions}")
         
-        # Keep only admissible commands
+        # 仅保留可接受的命令
         valid_extracted = {k: v for k, v in extracted.items() if k in admissible_commands}
         
-        # Normalize valid extracted probabilities
+        # 归一化有效提取的概率
         total = sum(valid_extracted.values())
         if total > 0:
             normalized = {k: v / total for k, v in valid_extracted.items()}
             if logger and filtered_actions:
-                # Show before/after normalization
-                logger.info(f"Before normalization (LLM raw): {extracted}")
-                logger.info(f"After normalization (filtered+redistributed): {normalized}")
+                # 显示归一化前后
+                logger.info(f"归一化前（LLM 原始）: {extracted}")
+                logger.info(f"归一化后（过滤+重新分配）: {normalized}")
         else:
-            # All extracted probabilities are 0; assign uniform probability
+            # 所有提取的概率都为 0；分配均匀概率
             uniform_prob = 1.0 / len(valid_extracted)
             normalized = {k: uniform_prob for k in valid_extracted.keys()}
         
-        # Set missing commands to 0
+        # 将缺失的命令设为 0
         for cmd in admissible_commands:
             if cmd not in normalized:
                 normalized[cmd] = 0.0
         
         if logger:
-            logger.info(f"Extracted valid actions: {list(valid_extracted.keys())}")
-            logger.info(f"Missing actions (set to 0): {[c for c in admissible_commands if c not in extracted]}")
+            logger.info(f"提取的有效动作: {list(valid_extracted.keys())}")
+            logger.info(f"缺失的动作（设为 0）: {[c for c in admissible_commands if c not in extracted]}")
         
         return normalized
     
-    # Strategy 3: uniform distribution on total failure
+    # 策略 3：完全失败时使用均匀分布
     else:
         if logger:
             logger.error(
-                f"Failed to extract any probabilities; using uniform fallback. "
-                f"Response text: {response_text[:200]}..."
+                f"未能提取任何概率；使用均匀分布回退。"
+                f"响应文本: {response_text[:200]}..."
             )
         
         uniform_prob = 1.0 / len(admissible_commands)

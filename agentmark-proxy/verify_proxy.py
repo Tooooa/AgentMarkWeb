@@ -2,10 +2,10 @@
 from openai import OpenAI
 import os
 
-# Point to our Local Proxy
+# 指向我们的本地代理
 client = OpenAI(
     base_url="http://localhost:8001/v1",
-    api_key="any-key" # Proxy handles auth to upstream
+    api_key="any-key" # 代理处理向上游的认证
 )
 
 print("--- Requesting Tool Call via Proxy ---")
@@ -54,13 +54,13 @@ response = client.chat.completions.create(
 print("\n--- Response Received ---")
 print(response)
 
-# Check if it looks like a standard tool call
+# 检查是否看起来像标准的工具调用
 choice = response.choices[0]
 if choice.finish_reason == "tool_calls":
     tc = choice.message.tool_calls[0]
-    print(f"\nSUCCESS: Received Tool Call via Proxy!")
-    print(f"Tool: {tc.function.name}")
-    print(f"Args: {tc.function.arguments}")
-    print(f"Reasoning: {choice.message.content}")
+    print(f"\n成功: 通过代理接收到工具调用！")
+    print(f"工具: {tc.function.name}")
+    print(f"参数: {tc.function.arguments}")
+    print(f"推理: {choice.message.content}")
 else:
-    print("\nFAILURE: Did not receive tool call.")
+    print("\n失败: 未接收到工具调用。")

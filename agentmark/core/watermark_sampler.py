@@ -331,29 +331,29 @@ def sample_behavior_watermark_uncertainty(probabilities, seed=None, round_num=0,
         ... )
         >>> print(f"选定：{behavior}，偏置：{biased_list}，稳定：{is_stable}，不确定性：{unc}")
     """
-    # Number of behaviors
+    # 行为数量
     behavior_num = len(BEHAVIOR_TYPES)
     
-    # Set random seed
+    # 设置随机种子
     if seed is not None:
-        # Combine seed and round number to create new seed
+        # 组合种子和轮次编号以创建新种子
         combined_seed = seed + round_num
         random.seed(combined_seed)
     
-    # Partition behaviors needing bias based on combined_seed and ratio
-    # Calculate count of behaviors to bias
+    # 根据 combined_seed 和 ratio 划分需要偏置的行为
+    # 计算要偏置的行为数量
     biased_count = int(behavior_num * ratio)
-    # Randomly select behaviors to bias
+    # 随机选择要偏置的行为
     add_logits_behavior_list = random.sample(BEHAVIOR_TYPES, biased_count)
     
-    # Get behavior list and corresponding probability list
+    # 获取行为列表和对应的概率列表
     behaviors = list(probabilities.keys())
     probs = list(probabilities.values())
     
-    # Record original probabilities for later comparison
+    # 记录原始概率以便后续比较
     original_probs = probs.copy()
     
-    # Add probability bias to selected behaviors
+    # 为选定的行为添加概率偏置
     modified_probs = []
     for behavior, prob in zip(behaviors, probs):
         if behavior in add_logits_behavior_list:
@@ -361,12 +361,12 @@ def sample_behavior_watermark_uncertainty(probabilities, seed=None, round_num=0,
         else:
             modified_probs.append(prob)
     
-    # Ensure probabilities sum to 1
+    # 确保概率总和为 1
     total = sum(modified_probs)
     if total != 1.0:
         modified_probs = [p/total for p in modified_probs]
     
-    # Use random.choices for weighted random selection
+    # 使用 random.choices 进行加权随机选择
     selected_behavior_watermark = random.choices(behaviors, weights=modified_probs, k=1)[0]
     
     # 计算不确定性
@@ -693,38 +693,38 @@ def differential_based_decoder(probabilities, selected_behavior, context_for_key
     
     return bits
 # ==============================================================================
-# ================ Red-Green List Sampling Algorithms ================
+# ================ 红绿列表采样算法 ================
 # ==============================================================================
 
 def sample_behavior_red_green(probabilities, context_for_key=None, history_responses=None, seed=None, round_num=0, gamma=0.5, delta=2.0):
     """
-    Use Red-Green List strategy (KGW Style) for behavior sampling.
+    使用红绿列表策略（KGW 风格）进行行为采样。
     
     Args:
-        probabilities (dict): Behavior and their raw probabilities.
-        context_for_key (str): Context info, used to generate random seed.
-        history_responses (list): Backup context.
-        seed (int): Backup seed.
-        round_num (int): Round number, introducing time variance.
-        gamma (float): Green list ratio (0.0 - 1.0). E.g., 0.5 means half behaviors are green list.
-        delta (float): Logit bias value. Green list behaviors' logits will increase by delta.
+        probabilities (dict): 行为及其原始概率。
+        context_for_key (str): 上下文信息，用于生成随机种子。
+        history_responses (list): 备用上下文。
+        seed (int): 备用种子。
+        round_num (int): 轮次编号，引入时间变化。
+        gamma (float): 绿列表比例（0.0 - 1.0）。例如，0.5 表示一半行为在绿列表中。
+        delta (float): Logit 偏置值。绿列表行为的 logits 将增加 delta。
         
     Returns:
-        tuple: (Selected behavior, Green list, 0 bits, context_used)
+        tuple: (选定的行为, 绿列表, 0 位, 使用的上下文)
     """
-    # 1. Prepare Data
+    # 1. 准备数据
     behaviors = sorted(probabilities.keys())
     probs_list = [probabilities[b] for b in behaviors]
-    # Force CPU to avoid CUDA initialization overhead in massive parallel runs
+    # 强制使用 CPU 以避免大规模并行运行中的 CUDA 初始化开销
     device = 'cpu'
     
-    # Convert probabilities to Logits (Inverse Softmax is not unique, assume raw Logits is log(p))
-    # Add a small value to avoid log(0)
+    # 将概率转换为 Logits（逆 Softmax 不是唯一的，假设原始 Logits 是 log(p)）
+    # 添加小值以避免 log(0)
     epsilon = 1e-9
     probs_tensor = torch.tensor(probs_list, dtype=torch.float32, device=device)
     logits = torch.log(probs_tensor + epsilon)
     
-    # 2. Generate Random Seed (Hash Context)
+    # 2. 生成随机种子（哈希上下文）
     if context_for_key is not None:
         context_used = context_for_key
     else:
@@ -732,53 +732,53 @@ def sample_behavior_red_green(probabilities, context_for_key=None, history_respo
         recent_responses = history_responses[-window_size:] if history_responses else []
         context_used = "||".join(recent_responses)
         
-    # Generate hash as pseudo-random source
-    # Note: To make red-green list independent for each behavior, typically hash(context + behavior)
-    # But for efficiency and convenience of list return, here we generate a context-based random vector
+    # 生成哈希作为伪随机源
+    # 注意：为了使每个行为的红绿列表独立，通常使用 hash(context + behavior)
+    # 但为了效率和返回列表的便利性，这里我们生成基于上下文的随机向量
     
     key = generate_contextual_key([context_used])
     nonce = str(round_num).encode('utf-8')
     PRG = DRBG(key, nonce)
     
-    # 3. Partition Red-Green List
-    # Generate a random number in [0, 1] for each behavior
-    # To ensure behavior order irrelevance, strictly should use hash(context + behavior_name)
-    # But as long as behaviors list sort order is fixed, using PRG sequence is also deterministic and efficient
+    # 3. 划分红绿列表
+    # 为每个行为生成 [0, 1] 范围内的随机数
+    # 为确保行为顺序无关性，严格来说应使用 hash(context + behavior_name)
+    # 但只要行为列表排序顺序固定，使用 PRG 序列也是确定且高效的
     
     green_list = []
     
-    # Generate len(behaviors) random numbers
+    # 生成 len(behaviors) 个随机数
     random_vals = [PRG.generate_random(32) for _ in range(len(behaviors))]
     
     mask = torch.zeros_like(logits, device=device)
     
     for i, r_val in enumerate(random_vals):
         if r_val < gamma:
-            # Enter Green List
+            # 进入绿列表
             green_list.append(behaviors[i])
             mask[i] = 1.0
             
-    # 4. Apply Watermark (Logit Bias)
-    # Green List Logits increase by delta
+    # 4. 应用水印（Logit 偏置）
+    # 绿列表 Logits 增加 delta
     watermarked_logits = logits + (mask * delta)
     
-    # 5. Sampling
-    # Normalize using Softmax
+    # 5. 采样
+    # 使用 Softmax 归一化
     watermarked_probs = torch.softmax(watermarked_logits, dim=0)
     
-    # Convert to Python list for weighted random
+    # 转换为 Python 列表用于加权随机
     final_probs = watermarked_probs.tolist()
     
-    # Sampling
-    # To maintain determinism, we can continue using PRG or use externally provided global seed
-    # To match AgentMark style, use random.choices (depends on global seed or loop seed)
-    # But considering sample_behavior_differential uses PRG efficiently, ideally PRG here too
+    # 采样
+    # 为保持确定性，我们可以继续使用 PRG 或使用外部提供的全局种子
+    # 为匹配 AgentMark 风格，使用 random.choices（依赖于全局种子或循环种子）
+    # 但考虑到 sample_behavior_differential 高效使用 PRG，理想情况下这里也使用 PRG
     
-    # Use next random number from PRG for sampling (Inverse Transform Sampling)
+    # 使用 PRG 的下一个随机数进行采样（逆变换采样）
     rand_p = PRG.generate_random(52)
     cdf = torch.cumsum(watermarked_probs, dim=0)
     idx = torch.searchsorted(cdf, rand_p).item()
-    idx = min(idx, len(behaviors) - 1) # Boundary protection
+    idx = min(idx, len(behaviors) - 1) # 边界保护
     
     selected_behavior = behaviors[idx]
     

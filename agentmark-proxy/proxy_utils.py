@@ -5,7 +5,7 @@ import uuid
 
 def inject_top_k_prompt(messages: list, tools: list, k: int = 3) -> list:
     """
-    Injects a system prompt to instruct the LLM to output Top-K candidates.
+    注入系统提示词，指示 LLM 输出 Top-K 候选。
     """
     tool_definitions = json.dumps([t["function"] for t in tools], indent=2)
     
@@ -25,18 +25,18 @@ def inject_top_k_prompt(messages: list, tools: list, k: int = 3) -> list:
         f"Output ONLY valid JSON."
     )
     
-    # Insert at the beginning or append to existing system prompt
+    # 在开头插入或追加到现有系统提示词
     new_messages = [{"role": "system", "content": system_instruction}] + messages
     return new_messages
 
 def parse_top_k_response(response: dict) -> tuple:
     """
-    Parses the LLM's JSON output to extract candidates and reasoning.
-    Returns: (candidates_list, reasoning_str)
+    解析 LLM 的 JSON 输出以提取候选和推理。
+    返回: (候选列表, 推理字符串)
     """
     try:
         content = response["choices"][0]["message"]["content"]
-        # Remove markdown code blocks if present
+        # 如果存在，移除 markdown 代码块
         if content.startswith("```json"):
             content = content[7:]
         if content.endswith("```"):
@@ -50,7 +50,7 @@ def parse_top_k_response(response: dict) -> tuple:
         for c in candidates:
             results.append({
                 "name": c.get("name"),
-                "args": json.dumps(c.get("args")), # Args must be string for ToolCall
+                "args": json.dumps(c.get("args")), # 参数必须是字符串以便工具调用
                 "prob": float(c.get("probability", 0.0))
             })
         return results, reasoning
@@ -60,8 +60,8 @@ def parse_top_k_response(response: dict) -> tuple:
 
 def construct_tool_call_response(original_model: str, tool_name: str, tool_args: str, content: str = None) -> dict:
     """
-    Constructs a standard OpenAI ChatCompletion response representing a Tool Call.
-    Optionally includes content (reasoning).
+    构造一个标准的 OpenAI ChatCompletion 响应，表示工具调用。
+    可选择包含内容（推理）。
     """
     tool_call_id = f"call_{uuid.uuid4().hex[:8]}"
     
@@ -75,7 +75,7 @@ def construct_tool_call_response(original_model: str, tool_name: str, tool_args:
                 "index": 0,
                 "message": {
                     "role": "assistant",
-                    "content": content,  # Now allowing reasoning content
+                    "content": content,  # 现在允许推理内容
                     "tool_calls": [
                         {
                             "id": tool_call_id,
@@ -92,7 +92,7 @@ def construct_tool_call_response(original_model: str, tool_name: str, tool_args:
             }
         ],
         "usage": {
-            "prompt_tokens": 0, # Mock usage
+            "prompt_tokens": 0, # 模拟使用量
             "completion_tokens": 0,
             "total_tokens": 0
         },

@@ -1,16 +1,16 @@
 """
-Lightweight proxy server that:
-- injects JSON scoring instructions into prompts,
-- forwards to DeepSeek (or compatible OpenAI-style API),
-- parses self-reported probabilities, runs watermark sampling, and decodes bits.
+轻量级代理服务器，功能：
+- 将 JSON 评分指令注入提示词，
+- 转发到 DeepSeek（或兼容的 OpenAI 风格 API），
+- 解析自报告的概率，运行水印采样，并解码位。
 
-Usage:
+用法：
     export DEEPSEEK_API_KEY=sk-xxx
-    # optional: TARGET_LLM_BASE=https://api.deepseek.com
-    # optional: HOST/PORT for this proxy
+    # 可选: TARGET_LLM_BASE=https://api.deepseek.com
+    # 可选: 此代理的 HOST/PORT
     uvicorn agentmark.proxy.server:app --host 0.0.0.0 --port 8000
 
-Client side (minimal change):
+客户端（最小更改）：
     export OPENAI_BASE_URL=http://localhost:8000/v1   # 或直接替换调用地址
     export OPENAI_API_KEY=<对方原有 key>              # 我们不使用，但保持兼容
 
@@ -74,9 +74,9 @@ class CompletionRequest(BaseModel):
     messages: List[Message]
     temperature: Optional[float] = 0.2
     max_tokens: Optional[int] = 300
-    candidates: Optional[List[str]] = None  # direct candidate list (preferred)
-    tools: Optional[List[Any]] = None       # OpenAI style tools/functions
-    extra_body: Optional[Dict[str, Any]] = None  # misc custom fields
+    candidates: Optional[List[str]] = None  # 直接候选列表（首选）
+    tools: Optional[List[Any]] = None       # OpenAI 风格的工具/函数
+    extra_body: Optional[Dict[str, Any]] = None  # 其他自定义字段
     context: Optional[str] = DEFAULT_CONTEXT
 
 
@@ -198,7 +198,7 @@ def _sanitize_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     cleaned: List[Dict[str, Any]] = []
     for msg in messages:
         if msg.get("role") == "tool" and not msg.get("tool_call_id"):
-            # Avoid invalid tool messages breaking downstream APIs.
+            # 避免无效的工具消息破坏下游 API。
             continue
         cleaned.append(msg)
     return cleaned
@@ -252,7 +252,7 @@ def _inject_prompt(
     mode: str,
     tools: Optional[List[Any]] = None,
 ) -> List[dict]:
-    # Add a dedicated system message for AgentMark instruction at the FRONT to avoid clobbering user prompt
+    # 在前面添加专用的系统消息用于 AgentMark 指令，以避免覆盖用户提示
     msgs = [{"role": "system", "content": instr}]
     msgs.extend([_message_to_dict(m) for m in messages])
 
@@ -276,7 +276,7 @@ def _inject_prompt(
                         tool_specs.append(f"- {name}(...)")
             if tool_specs:
                 tool_lines = "\n可用工具参数：\n" + "\n".join(tool_specs)
-        # Append to last user message, or add new user message if none
+        # 追加到最后一条用户消息，如果没有则添加新的用户消息
         for m in reversed(msgs):
             if m["role"] == "user":
                 m["content"] = (m["content"] or "") + "\n" + user_lines + tool_lines
@@ -284,13 +284,13 @@ def _inject_prompt(
         else:
             msgs.append({"role": "user", "content": user_lines + tool_lines})
     else:
-        # Bootstrap mode: ask LLM to propose candidates + probabilities
+        # 引导模式：要求 LLM 提出候选 + 概率
         bootstrap_note = (
             "未提供候选动作，请先生成一组合理的候选动作，并在 action_weights 中给出每个候选的概率。"
             "候选应为短语/动作名称，数量适中（3-8个）。"
         )
         msgs[0]["content"] += "\n" + bootstrap_note
-    # Record mode inside first system for transparency
+    # 在第一个系统消息中记录模式以提高透明度
     msgs[0]["content"] += f"\n[AgentMark mode={mode}]"
     return msgs
 
@@ -640,7 +640,7 @@ def proxy_completion(req: CompletionRequest, request: Request):
                 max_tokens=req.max_tokens,
             )
 
-        # Build response: keep original structure, append watermark info
+        # 构建响应：保持原始结构，追加水印信息
         resp_dict = final_resp.model_dump()
         if tool_mode == "proxy" and req.tools:
             tool_calls = _build_tool_calls(result["action"], result["action_args"])
