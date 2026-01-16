@@ -1,3 +1,14 @@
+"""
+AgentMark Dashboard 后端服务器
+
+这是 AgentMark 项目的主要 FastAPI 应用程序，提供以下功能：
+1. 会话管理：初始化和管理带水印和基线代理的会话
+2. 步骤执行：执行代理步骤并流式传输结果
+3. 工具检索：使用 ToolBench 检索器查找相关工具
+4. 评估：比较带水印和基线代理的性能
+5. 场景持久化：保存和加载对话历史
+6. Add Agent 模式：支持 Swarm 插件模式的代理交互
+"""
 
 import json
 import re
@@ -15,14 +26,23 @@ from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI, AsyncOpenAI
 from sentence_transformers import SentenceTransformer, util
 import copy
-# --- Configuration ---
+
+# --- 配置 ---
+# 项目根目录路径
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+# Swarm 框架根目录
 SWARM_ROOT = PROJECT_ROOT / "swarm"
+# ToolBench 工具数据根目录
 TOOL_DATA_ROOT = PROJECT_ROOT / "experiments/toolbench/data/data/toolenv/tools"
 
 
 def _load_root_dotenv() -> None:
-    """尽力加载 PROJECT_ROOT/.env，无需外部依赖。"""
+    """
+    尽力加载 PROJECT_ROOT/.env 文件，无需外部依赖。
+    
+    从项目根目录的 .env 文件中读取环境变量并设置到 os.environ 中。
+    如果文件不存在或解析失败，静默失败以避免影响服务器启动。
+    """
     env_path = PROJECT_ROOT / ".env"
     if not env_path.exists():
         return
@@ -46,6 +66,23 @@ def _load_root_dotenv() -> None:
 
 
 def _resolve_api_key(request_api_key: Optional[str]) -> str:
+    """
+    解析 API 密钥，按优先级顺序查找。
+    
+    优先级顺序：
+    1. 请求中提供的 API 密钥
+    2. 环境变量 DEEPSEEK_API_KEY
+    3. 环境变量 OPENAI_API_KEY
+    
+    Args:
+        request_api_key: 请求中提供的可选 API 密钥
+        
+    Returns:
+        str: 解析后的 API 密钥
+        
+    Raises:
+        HTTPException: 如果未找到有效的 API 密钥
+    """
     candidate = (request_api_key or "").strip()
     if candidate:
         return candidate
@@ -63,38 +100,42 @@ def _resolve_api_key(request_api_key: Optional[str]) -> str:
 
 _load_root_dotenv()
 
+# 添加项目路径到 sys.path
 import sys
 sys.path.append(str(PROJECT_ROOT))
 if SWARM_ROOT.exists():
     sys.path.append(str(SWARM_ROOT))
 
+# 导入 AgentMark 核心模块
 from agentmark.core.rlnc_codec import DeterministicRLNC
 from agentmark.core.watermark_sampler import sample_behavior_differential
 from agentmark.sdk.prompt_adapter import extract_json_payload, get_prompt_instruction
 
-# --- Database Setup ---
+# --- 数据库设置 ---
 from dashboard.server.database import ConversationDB
+# 初始化对话数据库，用于持久化会话历史
 db = ConversationDB(db_path=str(PROJECT_ROOT / "dashboard/data/conversations.db"))
 
-# --- Retriever Setup ---
+# --- 检索器设置 ---
 from dashboard.server.retriever import ToolBenchRetriever
-# from retriever import ToolBenchRetriever # 如果从 server 目录运行？
-# 如果设置了路径，最好使用相对或绝对路径。
-# 由于 app.py 在 dashboard/server 中，如果 CWD 是 dashboard/server 或者 dashboard/server 在路径中，'import retriever' 可以工作。
-# 但我们通常从根目录运行。
-# 如果我们运行 `python dashboard/server/app.py`，sys.path[0] 是 dashboard/server。所以 `import retriever` 可以工作。
-# 但 `agentmark` 需要根目录在路径中。
-
 from agentmark.environments.toolbench.adapter import ToolBenchAdapter
+
+# 全局检索器实例（在启动时异步初始化）
 retriever = None
 retriever_loading = False
 
 async def init_retriever():
+    """
+    异步初始化 ToolBench 检索器。
+    
+    在后台线程中加载检索器模型并索引工具，以避免阻塞服务器启动。
+    使用 CPU 设备以确保兼容性。
+    """
     global retriever, retriever_loading
     retriever_loading = True
     print("[INFO] Background: Initializing ToolBench Retriever on CPU...")
     try:
-        # 在线程中运行以避免阻塞简单初始化
+        # 在线程中运行以避免阻塞事件循环
         r = await asyncio.to_thread(ToolBenchRetriever, TOOL_DATA_ROOT, device="cpu")
         await asyncio.to_thread(r.load_model)
         await asyncio.to_thread(r.index_tools)
@@ -105,30 +146,56 @@ async def init_retriever():
     finally:
         retriever_loading = False
 
-# --- App Setup ---
+# --- 应用设置 ---
 app = FastAPI()
 
+# 添加 CORS 中间件以允许跨域请求
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # 允许所有来源（生产环境应限制）
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # 允许所有 HTTP 方法
+    allow_headers=["*"],  # 允许所有请求头
 )
 
 @app.on_event("startup")
 async def startup_event():
+    """
+    应用启动事件处理器。
+    
+    在后台异步初始化 ToolBench 检索器。
+    """
     print("[INFO] Initializing ToolBench Retriever...")
     asyncio.create_task(init_retriever())
 
 
-# --- Simulation State ---
+# --- 模拟状态 ---
 
 class AgentState:
-    """封装单个代理的状态（基线或带水印）"""
+    """
+    封装单个代理的状态（基线或带水印）。
+    
+    Attributes:
+        role: 代理角色，'baseline' 或 'watermarked'
+        task: 任务数据的深拷贝
+        adapter: ToolBench 适配器实例
+        episode: 准备好的任务回合数据
+        trajectory: 执行历史记录列表
+        swarm_history: Swarm 模式的历史记录
+        step_count: 当前步骤计数
+        last_observation: 最后一次工具执行的观察结果
+        done: 是否完成任务
+    """
     def __init__(self, task_data: Dict, role: str):
-        self.role = role # 'baseline' 或 'watermarked'
-        self.task = copy.deepcopy(task_data) # 深拷贝以确保独立修改
+        """
+        初始化代理状态。
+        
+        Args:
+            task_data: 任务数据字典
+            role: 代理角色，'baseline' 或 'watermarked'
+        """
+        self.role = role  # 'baseline' 或 'watermarked'
+        self.task = copy.deepcopy(task_data)  # 深拷贝以确保独立修改
         
         # ToolBench 适配器状态
         # 对于此演示，我们使用简化的适配器，依赖 LLM 提出 JSON
@@ -136,14 +203,40 @@ class AgentState:
         self.episode = self.adapter.prepare_episode(self.task)
         
         # 执行历史
-        self.trajectory = [] # {role, message} 列表
+        self.trajectory = []  # {role, message} 列表
         self.swarm_history: List[Dict[str, Any]] = []
         self.step_count = 0
         self.last_observation = ""
         self.done = False
 
 class Session:
+    """
+    会话类，管理带水印和基线代理的并行执行。
+    
+    Attributes:
+        session_id: 唯一会话标识符
+        start_time: 会话开始时间戳
+        max_steps: 最大执行步数
+        watermarked_state: 带水印代理的状态
+        baseline_state: 基线代理的状态
+        bit_stream_str_raw: 原始载荷比特流字符串
+        rlnc: 确定性 RLNC 编解码器实例
+        bit_index: 当前比特索引
+        client: 同步 OpenAI 客户端
+        async_client: 异步 OpenAI 客户端
+        model: 使用的模型名称
+        evaluation_result: 评估结果
+    """
     def __init__(self, session_id: str, api_key: str, task_data: Dict, payload: str = "1101"):
+        """
+        初始化会话。
+        
+        Args:
+            session_id: 唯一会话标识符
+            api_key: API 密钥
+            task_data: 任务数据字典
+            payload: 水印载荷比特流字符串，默认为 "1101"
+        """
         self.session_id = session_id
         self.start_time = time.time()
         
@@ -155,7 +248,7 @@ class Session:
         self.baseline_state = AgentState(task_data, 'baseline')
         
         # 载荷 / 水印状态（仅用于带水印的代理）
-        self.bit_stream_str_raw = payload if payload else "1101" # 保留原始值以供参考
+        self.bit_stream_str_raw = payload if payload else "1101"  # 保留原始值以供参考
         # 初始化 RLNC
         self.rlnc = DeterministicRLNC(self.bit_stream_str_raw)
         self.bit_index = 0
@@ -170,19 +263,38 @@ class Session:
             base_url="https://api.deepseek.com"
         )
         self.model = "deepseek-chat"
-        self.evaluation_result = None # 存储评估结果
+        self.evaluation_result = None  # 存储评估结果
 
+# 全局会话字典
 sessions: Dict[str, Session] = {}
 
-# --- Swarm Plugin Mode ---
+# --- Swarm 插件模式 ---
 
 def get_weather(location: str, time: str = "now") -> str:
-    """获取给定位置的当前天气。位置必须是城市。"""
+    """
+    获取给定位置的当前天气。
+    
+    Args:
+        location: 城市名称
+        time: 时间，默认为 "now"
+        
+    Returns:
+        JSON 格式的天气信息
+    """
     return json.dumps({"location": location, "temperature": "65", "time": time})
 
 
 def get_weather_forecast(location: str, days: str = "3") -> str:
-    """获取给定位置和天数的短期天气预报。"""
+    """
+    获取给定位置和天数的短期天气预报。
+    
+    Args:
+        location: 城市名称
+        days: 预报天数，默认为 "3"
+        
+    Returns:
+        JSON 格式的天气预报信息
+    """
     try:
         days_val = int(days)
     except Exception:
@@ -193,12 +305,30 @@ def get_weather_forecast(location: str, days: str = "3") -> str:
 
 
 def get_air_quality(location: str) -> str:
-    """获取给定位置的简单空气质量报告。"""
+    """
+    获取给定位置的简单空气质量报告。
+    
+    Args:
+        location: 城市名称
+        
+    Returns:
+        JSON 格式的空气质量信息
+    """
     return json.dumps({"location": location, "aqi": 42, "status": "good"})
 
 
 def send_email(recipient: str, subject: str, body: str) -> str:
-    """发送简短邮件。"""
+    """
+    发送简短邮件。
+    
+    Args:
+        recipient: 收件人邮箱地址
+        subject: 邮件主题
+        body: 邮件正文
+        
+    Returns:
+        发送状态消息
+    """
     print("Sending email...")
     print(f"To: {recipient}")
     print(f"Subject: {subject}")
@@ -207,14 +337,32 @@ def send_email(recipient: str, subject: str, body: str) -> str:
 
 
 def send_sms(phone_number: str, message: str) -> str:
-    """向电话号码发送简短短信。"""
+    """
+    向电话号码发送简短短信。
+    
+    Args:
+        phone_number: 电话号码
+        message: 短信内容
+        
+    Returns:
+        发送状态消息
+    """
     print("Sending sms...")
     print(f"To: {phone_number}")
     print(f"Message: {message}")
     return "Sent!"
 
 def get_top_rated_movies(limit: int = 10, min_imdb: float = 8.0) -> str:
-    """返回带有 IMDb 评分的顶级电影列表。"""
+    """
+    返回带有 IMDb 评分的顶级电影列表。
+    
+    Args:
+        limit: 返回电影数量限制，默认为 10
+        min_imdb: 最低 IMDb 评分，默认为 8.0
+        
+    Returns:
+        JSON 格式的电影列表
+    """
     return json.dumps(
         {
             "limit": limit,
@@ -229,7 +377,16 @@ def get_top_rated_movies(limit: int = 10, min_imdb: float = 8.0) -> str:
 
 
 def search_movies_by_genre(genre: str, limit: int = 10) -> str:
-    """按类型搜索电影。"""
+    """
+    按类型搜索电影。
+    
+    Args:
+        genre: 电影类型
+        limit: 返回电影数量限制，默认为 10
+        
+    Returns:
+        JSON 格式的电影列表
+    """
     return json.dumps(
         {
             "genre": genre,
@@ -240,7 +397,15 @@ def search_movies_by_genre(genre: str, limit: int = 10) -> str:
 
 
 def get_movie_summary(title: str) -> str:
-    """获取电影标题的简短摘要。"""
+    """
+    获取电影标题的简短摘要。
+    
+    Args:
+        title: 电影标题
+        
+    Returns:
+        JSON 格式的电影摘要
+    """
     return json.dumps(
         {
             "title": title,
@@ -250,16 +415,28 @@ def get_movie_summary(title: str) -> str:
 
 
 def search_web(query: str) -> str:
-    """为一般查询搜索网络。"""
+    """
+    为一般查询搜索网络。
+    
+    Args:
+        query: 搜索查询字符串
+        
+    Returns:
+        JSON 格式的搜索结果
+    """
     return json.dumps({"query": query, "results": []})
 
 
+# Add Agent 模式的系统提示
 ADD_AGENT_SYSTEM_PROMPT = "You are a helpful agent."
+# ToolBench Swarm 模式的提示
 TOOLBENCH_SWARM_PROMPT = (
     "You are a tool-using agent. Use the provided tools to solve the task. "
     "Call a tool when needed; otherwise, respond with the final answer."
 )
 
+# Add Agent 工具定义列表
+# 这些工具用于 Add Agent 模式，提供天气、邮件、电影等功能
 ADD_AGENT_TOOLS = [
     {
         "type": "function",
@@ -385,11 +562,20 @@ ADD_AGENT_TOOLS = [
     },
 ]
 
+# 全局 Swarm 代理实例缓存
 _SWARM_ADD_AGENT = None
 _SWARM_TOOLBENCH_AGENT = None
 
 
 def _get_swarm_add_agent():
+    """
+    获取或创建 Swarm Add Agent 实例。
+    
+    使用单例模式缓存代理实例以提高性能。
+    
+    Returns:
+        Agent: Swarm Add Agent 实例
+    """
     global _SWARM_ADD_AGENT
     if _SWARM_ADD_AGENT is None:
         from swarm import Agent
@@ -413,6 +599,14 @@ def _get_swarm_add_agent():
 
 
 def _get_swarm_toolbench_agent():
+    """
+    获取或创建 Swarm ToolBench Agent 实例。
+    
+    使用单例模式缓存代理实例以提高性能。
+    
+    Returns:
+        Agent: Swarm ToolBench Agent 实例
+    """
     global _SWARM_TOOLBENCH_AGENT
     if _SWARM_TOOLBENCH_AGENT is None:
         from swarm import Agent
@@ -425,6 +619,15 @@ def _get_swarm_toolbench_agent():
 
 
 def _toolbench_param_to_schema(param: Any) -> Optional[Dict[str, Any]]:
+    """
+    将 ToolBench 参数转换为 JSON Schema 格式。
+    
+    Args:
+        param: 参数定义，可以是字典或字符串
+        
+    Returns:
+        Optional[Dict[str, Any]]: JSON Schema 格式的参数定义，如果无效则返回 None
+    """
     if isinstance(param, dict):
         name = param.get("name") or param.get("parameter") or param.get("field")
         if not name:
@@ -448,6 +651,15 @@ def _toolbench_param_to_schema(param: Any) -> Optional[Dict[str, Any]]:
 
 
 def _build_toolbench_tools(tool_summaries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    从 ToolBench 工具摘要构建 OpenAI 工具格式。
+    
+    Args:
+        tool_summaries: ToolBench 工具摘要列表
+        
+    Returns:
+        List[Dict[str, Any]]: OpenAI 工具格式的工具列表
+    """
     tools: List[Dict[str, Any]] = []
     for tool in tool_summaries:
         if not isinstance(tool, dict):
@@ -495,6 +707,12 @@ def _build_toolbench_tools(tool_summaries: List[Dict[str, Any]]) -> List[Dict[st
 
 
 def _get_add_agent_candidates() -> List[str]:
+    """
+    获取 Add Agent 模式的候选动作名称列表。
+    
+    Returns:
+        List[str]: 候选动作名称列表
+    """
     candidates: List[str] = []
     for tool in ADD_AGENT_TOOLS:
         if not isinstance(tool, dict):
@@ -509,6 +727,18 @@ def _get_add_agent_candidates() -> List[str]:
 
 
 def _build_add_agent_scoring_messages(user_message: str) -> List[Dict[str, str]]:
+    """
+    构建 Add Agent 评分消息列表。
+    
+    为基线代理构建包含候选动作和工具参数的消息列表，
+    用于生成动作概率分布。
+    
+    Args:
+        user_message: 用户消息
+        
+    Returns:
+        List[Dict[str, str]]: 消息列表
+    """
     instr = get_prompt_instruction()
     messages: List[Dict[str, str]] = [
         {"role": "system", "content": ADD_AGENT_SYSTEM_PROMPT},
@@ -549,6 +779,15 @@ def _build_add_agent_scoring_messages(user_message: str) -> List[Dict[str, str]]
 
 
 def _render_prompt_messages(messages: List[Dict[str, Any]]) -> str:
+    """
+    将消息列表渲染为文本格式。
+    
+    Args:
+        messages: 消息列表
+        
+    Returns:
+        str: 渲染后的文本
+    """
     lines: List[str] = []
     for msg in messages:
         role = msg.get("role", "")
@@ -560,7 +799,32 @@ def _render_prompt_messages(messages: List[Dict[str, Any]]) -> str:
 
 
 class AddAgentSession:
+    """
+    Add Agent 会话类。
+    
+    管理 Add Agent 模式的会话状态，包括带水印和基线轨迹。
+    
+    Attributes:
+        session_id: 唯一会话标识符
+        api_key: API 密钥
+        repo_url: 仓库 URL
+        step_count: 步骤计数
+        task_query: 任务查询
+        last_user_message: 最后一条用户消息
+        watermarked_trajectory: 带水印轨迹
+        baseline_trajectory: 基线轨迹
+        model: 使用的模型名称
+        async_client: 异步 OpenAI 客户端
+    """
     def __init__(self, session_id: str, api_key: str, repo_url: str):
+        """
+        初始化 Add Agent 会话。
+        
+        Args:
+            session_id: 唯一会话标识符
+            api_key: API 密钥
+            repo_url: 仓库 URL
+        """
         self.session_id = session_id
         self.api_key = api_key
         self.repo_url = repo_url
@@ -576,12 +840,15 @@ class AddAgentSession:
         )
 
 
+# Add Agent 会话字典
 add_agent_sessions: Dict[str, AddAgentSession] = {}
 
 
+# 代理基础 URL 缓存
 _PROXY_BASE_CACHE: Optional[str] = None
 _BASE_LLM_BASE_CACHE: Optional[str] = None
 
+# 基础模型映射表
 _BASE_MODEL_MAP = {
     "gpt-4o": "deepseek-chat",
     "gpt-4o-mini": "deepseek-chat",
@@ -592,6 +859,17 @@ _BASE_MODEL_MAP = {
 
 
 def _get_proxy_base() -> str:
+    """
+    获取代理基础 URL。
+    
+    从环境变量中读取代理基础 URL，优先级：
+    1. AGENTMARK_PROXY_BASE
+    2. OPENAI_BASE_URL
+    3. 默认值 "http://localhost:8001/v1"
+    
+    Returns:
+        str: 代理基础 URL
+    """
     global _PROXY_BASE_CACHE
     if _PROXY_BASE_CACHE is None:
         _PROXY_BASE_CACHE = (
@@ -604,6 +882,17 @@ def _get_proxy_base() -> str:
 
 
 def _get_base_llm_base() -> str:
+    """
+    获取基础 LLM 基础 URL。
+    
+    从环境变量中读取基础 LLM 基础 URL，优先级：
+    1. AGENTMARK_BASE_LLM_BASE
+    2. TARGET_LLM_BASE
+    3. 默认值 "https://api.deepseek.com"
+    
+    Returns:
+        str: 基础 LLM 基础 URL
+    """
     global _BASE_LLM_BASE_CACHE
     if _BASE_LLM_BASE_CACHE is None:
         _BASE_LLM_BASE_CACHE = (
@@ -616,6 +905,17 @@ def _get_base_llm_base() -> str:
 
 
 def _resolve_base_model(requested_model: str) -> str:
+    """
+    解析基础模型名称。
+    
+    根据环境变量和模型映射表解析实际使用的模型名称。
+    
+    Args:
+        requested_model: 请求的模型名称
+        
+    Returns:
+        str: 解析后的模型名称
+    """
     override = os.getenv("AGENTMARK_BASE_MODEL") or os.getenv("TARGET_LLM_MODEL")
     if override:
         return override
@@ -630,6 +930,15 @@ def _resolve_base_model(requested_model: str) -> str:
 
 
 def _build_proxy_client(api_key: Optional[str]) -> OpenAI:
+    """
+    构建代理客户端。
+    
+    Args:
+        api_key: API 密钥
+        
+    Returns:
+        OpenAI: 配置好的 OpenAI 客户端
+    """
     return OpenAI(
         api_key=api_key or os.getenv("OPENAI_API_KEY") or "anything",
         base_url=_get_proxy_base(),
@@ -637,6 +946,15 @@ def _build_proxy_client(api_key: Optional[str]) -> OpenAI:
 
 
 def _build_base_llm_client(api_key: Optional[str]) -> OpenAI:
+    """
+    构建基础 LLM 客户端。
+    
+    Args:
+        api_key: API 密钥
+        
+    Returns:
+        OpenAI: 配置好的 OpenAI 客户端
+    """
     return OpenAI(
         api_key=api_key or os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY") or "anything",
         base_url=_get_base_llm_base(),
@@ -644,6 +962,17 @@ def _build_base_llm_client(api_key: Optional[str]) -> OpenAI:
 
 
 def _extract_watermark(completion: Any) -> Optional[Dict[str, Any]]:
+    """
+    从完成响应中提取水印数据。
+    
+    尝试从多个可能的位置提取水印信息。
+    
+    Args:
+        completion: LLM 完成响应对象
+        
+    Returns:
+        Optional[Dict[str, Any]]: 水印数据字典，如果未找到则返回 None
+    """
     try:
         extra = getattr(completion, "model_extra", None)
         if extra and isinstance(extra, dict) and extra.get("watermark"):
@@ -658,6 +987,15 @@ def _extract_watermark(completion: Any) -> Optional[Dict[str, Any]]:
 
 
 def _extract_tool_calls(message: Any) -> List[Dict[str, Any]]:
+    """
+    从消息中提取工具调用列表。
+    
+    Args:
+        message: 消息对象
+        
+    Returns:
+        List[Dict[str, Any]]: 工具调用列表
+    """
     raw_tool_calls = getattr(message, "tool_calls", None)
     if not raw_tool_calls:
         return []
@@ -673,6 +1011,15 @@ def _extract_tool_calls(message: Any) -> List[Dict[str, Any]]:
 
 
 def _extract_tokens_used(completion: Any) -> float:
+    """
+    从完成响应中提取使用的 token 数量。
+    
+    Args:
+        completion: LLM 完成响应对象
+        
+    Returns:
+        float: 使用的 token 数量
+    """
     tokens_used = 0.0
     try:
         usage = getattr(completion, "usage", None)
@@ -693,6 +1040,21 @@ def _build_baseline_step(
     fallback_content: str = "",
     candidates: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
+    """
+    构建基线步骤数据。
+    
+    从 LLM 完成响应中提取并构建基线代理的步骤数据，
+    包括思考、动作、工具详情、概率分布等。
+    
+    Args:
+        completion: LLM 完成响应对象
+        latency: 延迟时间（秒）
+        fallback_content: 回退内容
+        candidates: 候选动作列表
+        
+    Returns:
+        Optional[Dict[str, Any]]: 步骤数据字典，如果无效则返回 None
+    """
     try:
         message = completion.choices[0].message if completion and completion.choices else None
     except Exception:
@@ -815,6 +1177,20 @@ def _build_baseline_step(
 
 
 def _extract_thought_from_raw_output(raw_text: str) -> str:
+    """
+    从原始输出中提取思考内容。
+    
+    尝试多种方法从 LLM 输出中提取 "thought" 字段：
+    1. 解析 JSON 载荷
+    2. 正则表达式匹配
+    3. 字符串搜索和提取
+    
+    Args:
+        raw_text: 原始 LLM 输出文本
+        
+    Returns:
+        str: 提取的思考内容，如果未找到则返回空字符串
+    """
     if not raw_text:
         return ""
 
@@ -895,6 +1271,22 @@ def _build_add_agent_step(
     latency: float,
     tokens: float,
 ) -> Dict[str, Any]:
+    """
+    构建 Add Agent 步骤数据。
+    
+    从水印数据和完成响应中构建 Add Agent 模式的步骤数据。
+    
+    Args:
+        watermark: 水印数据字典
+        step_index: 步骤索引
+        completion_content: 完成响应内容
+        completion_tool_calls: 工具调用列表
+        latency: 延迟时间（秒）
+        tokens: 使用的 token 数量
+        
+    Returns:
+        Dict[str, Any]: 步骤数据字典
+    """
     frontend = watermark.get("frontend_data") or {}
     diff = frontend.get("distribution_diff") or []
     distribution = []
@@ -942,40 +1334,102 @@ def _build_add_agent_step(
     }
 
 class InitRequest(BaseModel):
+    """
+    初始化会话请求模型。
+    
+    Attributes:
+        apiKey: 可选的 API 密钥
+        scenarioId: 场景标识符
+        payload: 可选的水印载荷比特流
+    """
     apiKey: Optional[str] = None
     scenarioId: str
     payload: Optional[str] = None
 
 class CustomInitRequest(BaseModel):
+    """
+    自定义初始化会话请求模型。
+    
+    Attributes:
+        apiKey: 可选的 API 密钥
+        query: 自定义查询字符串
+        payload: 可选的水印载荷比特流
+    """
     apiKey: Optional[str] = None
     query: str
     payload: Optional[str] = None
 
 class StepRequest(BaseModel):
+    """
+    执行步骤请求模型。
+    
+    Attributes:
+        sessionId: 会话标识符
+    """
     sessionId: str
 
 class ContinueRequest(BaseModel):
+    """
+    继续会话请求模型。
+    
+    Attributes:
+        sessionId: 会话标识符
+        prompt: 用户提示
+    """
     sessionId: str
     prompt: str
 
 
 class AddAgentInitRequest(BaseModel):
+    """
+    Add Agent 初始化请求模型。
+    
+    Attributes:
+        apiKey: 可选的 API 密钥
+        repoUrl: 可选的仓库 URL
+    """
     apiKey: Optional[str] = None
     repoUrl: Optional[str] = ""
 
 
 class AddAgentTurnRequest(BaseModel):
+    """
+    Add Agent 轮次请求模型。
+    
+    Attributes:
+        sessionId: 会话标识符
+        message: 用户消息
+        apiKey: 可选的 API 密钥
+    """
     sessionId: str
     message: str
     apiKey: Optional[str] = None
 
 
 class AddAgentEvaluateRequest(BaseModel):
+    """
+    Add Agent 评估请求模型。
+    
+    Attributes:
+        sessionId: 会话标识符
+        language: 可选的语言代码（"en" 或 "zh"）
+    """
     sessionId: str
     language: Optional[str] = "en"
 
-# --- Helpers ---
+# --- 辅助函数 ---
 def build_messages(query: str, tool_summaries: List[str], admissible_commands: List[str]) -> List[Dict]:
+    """
+    构建与 ToolBench 兼容的消息列表。
+    
+    Args:
+        query: 任务查询
+        tool_summaries: 工具摘要列表
+        admissible_commands: 可用命令列表
+        
+    Returns:
+        List[Dict]: 消息列表
+    """
     # 构建与 ToolBench 兼容的系统提示
     sys_prompt = f"""You are an Auto-GPT agent. Result of your previous step is passed to you.
 You have access to the following tools:
@@ -993,11 +1447,20 @@ If you have enough information, use "Finish" and provide the final answer in "ac
     ]
 
 def extract_and_normalize_probabilities(output: str, candidates: List[str]) -> Dict[str, float]:
-    # DeepSeek chat API 在此演示中不暴露 logprobs。
-    # 因此我们：
-    #   1) 如果存在，优先使用模型提供的 `action_weights`（已归一化）。
-    #   2) 否则，回退到有偏但非退化的分布（多个"步骤"），
-    #      以避免"一个巨大 + 许多相同微小"的形状，这种形状会在 UI 中折叠桶。
+    """
+    从输出中提取并归一化概率分布。
+    
+    由于 DeepSeek chat API 不暴露 logprobs，此函数：
+    1. 优先使用模型提供的 `action_weights`（如果存在）
+    2. 否则，回退到有偏但非退化的几何分布
+    
+    Args:
+        output: LLM 输出字符串
+        candidates: 候选动作列表
+        
+    Returns:
+        Dict[str, float]: 归一化的概率分布
+    """
 
     if not candidates:
         return {}
@@ -1095,6 +1558,16 @@ def extract_and_normalize_probabilities(output: str, candidates: List[str]) -> D
 
 
 def _parse_action_args_from_output(model_output: str, chosen: str) -> Dict[str, Any]:
+    """
+    从模型输出中解析动作参数。
+    
+    Args:
+        model_output: 模型输出字符串
+        chosen: 选择的动作名称
+        
+    Returns:
+        Dict[str, Any]: 动作参数字典
+    """
     try:
         start = model_output.find("{")
         end = model_output.rfind("}")
@@ -1112,6 +1585,17 @@ def _parse_action_args_from_output(model_output: str, chosen: str) -> Dict[str, 
 
 @app.post("/api/init")
 async def init_session(req: InitRequest):
+    """
+    初始化新会话。
+    
+    创建一个新的会话，包含带水印和基线代理。
+    
+    Args:
+        req: 初始化请求
+        
+    Returns:
+        Dict: 包含会话 ID 和任务信息的响应
+    """
     session_id = f"sess_{int(time.time())}_{req.scenarioId}"
     
     # 加载场景数据
@@ -1148,6 +1632,17 @@ async def init_session(req: InitRequest):
 
 @app.post("/api/init_custom")
 async def init_custom_session(req: CustomInitRequest):
+    """
+    使用自定义查询初始化新会话。
+    
+    创建一个新的会话，使用检索器查找相关工具。
+    
+    Args:
+        req: 自定义初始化请求
+        
+    Returns:
+        Dict: 包含会话 ID 和任务信息的响应
+    """
     session_id = f"sess_{int(time.time())}_custom"
     
     print(f"\n[INFO] >>> RECEIVED CUSTOM PROMPT: '{req.query}' <<<")
@@ -1186,6 +1681,15 @@ async def init_custom_session(req: CustomInitRequest):
 
 @app.post("/api/add_agent/start")
 async def start_add_agent_session(req: AddAgentInitRequest):
+    """
+    启动 Add Agent 会话。
+    
+    Args:
+        req: Add Agent 初始化请求
+        
+    Returns:
+        Dict: 包含会话 ID 和代理基础 URL 的响应
+    """
     session_id = f"agent_{int(time.time())}_{uuid.uuid4().hex[:6]}"
     add_agent_sessions[session_id] = AddAgentSession(
         session_id=session_id,
@@ -1200,6 +1704,20 @@ async def start_add_agent_session(req: AddAgentInitRequest):
 
 @app.post("/api/add_agent/turn")
 async def add_agent_turn(req: AddAgentTurnRequest):
+    """
+    执行 Add Agent 轮次。
+    
+    并行执行带水印和基线代理的单个轮次。
+    
+    Args:
+        req: Add Agent 轮次请求
+        
+    Returns:
+        Dict: 包含步骤数据、提示跟踪和水印信息的响应
+        
+    Raises:
+        HTTPException: 如果会话未找到或消息为空
+    """
     if req.sessionId not in add_agent_sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     if not req.message.strip():
@@ -1426,6 +1944,20 @@ async def add_agent_turn(req: AddAgentTurnRequest):
 
 @app.post("/api/add_agent/evaluate")
 async def evaluate_add_agent(req: AddAgentEvaluateRequest):
+    """
+    评估 Add Agent 会话。
+    
+    使用 LLM 作为评判者比较带水印和基线代理的性能。
+    
+    Args:
+        req: Add Agent 评估请求
+        
+    Returns:
+        Dict: 包含评分和理由的评估结果
+        
+    Raises:
+        HTTPException: 如果会话未找到或数据不足
+    """
     if req.sessionId not in add_agent_sessions:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -1523,7 +2055,17 @@ async def evaluate_add_agent(req: AddAgentEvaluateRequest):
 
 @app.post("/api/add_agent/{session_id}/save")
 async def save_add_agent_session(session_id: str):
-    """将 Add Agent 会话保存到历史记录"""
+    """
+    将 Add Agent 会话保存到历史记录。
+    
+    注意：实际保存逻辑由前端通过通用保存 API 处理。
+    
+    Args:
+        session_id: 会话标识符
+        
+    Raises:
+        HTTPException: 如果会话未找到或保存失败
+    """
     if session_id not in add_agent_sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     
@@ -1550,11 +2092,23 @@ async def save_add_agent_session(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --- Scenario Persistence ---
+# --- 场景持久化 ---
 
 @app.get("/api/scenarios")
 async def list_scenarios(search: Optional[str] = None, limit: int = 100, type: Optional[str] = None):
-    """列出数据库中所有保存的对话，支持可选的搜索和类型过滤"""
+    """
+    列出数据库中所有保存的对话。
+    
+    支持可选的搜索和类型过滤。
+    
+    Args:
+        search: 可选的搜索关键词
+        limit: 返回结果数量限制，默认为 100
+        type: 可选的类型过滤器
+        
+    Returns:
+        List: 对话场景列表
+    """
     try:
         scenarios = db.list_conversations(limit=limit, search=search, type_filter=type)
         return scenarios
@@ -1563,14 +2117,34 @@ async def list_scenarios(search: Optional[str] = None, limit: int = 100, type: O
         return []
 
 class SaveScenarioRequest(BaseModel):
-    title: Any # str or dict
+    """
+    保存场景请求模型。
+    
+    Attributes:
+        title: 标题，可以是字符串或字典（多语言）
+        data: 场景数据字典
+        id: 可选的场景 ID，用于覆盖现有场景
+        type: 场景类型，默认为 "benchmark"
+    """
+    title: Any  # str or dict
     data: Dict
-    id: Optional[str] = None # 可选的 ID 以覆盖
-    type: Optional[str] = "benchmark" # 默认为 benchmark
+    id: Optional[str] = None  # 可选的 ID 以覆盖
+    type: Optional[str] = "benchmark"  # 默认为 benchmark
 
 @app.post("/api/save_scenario")
 async def save_scenario(req: SaveScenarioRequest):
-    """将对话保存到数据库"""
+    """
+    将对话保存到数据库。
+    
+    Args:
+        req: 保存场景请求
+        
+    Returns:
+        Dict: 包含状态和场景 ID 的响应
+        
+    Raises:
+        HTTPException: 如果保存失败
+    """
     try:
         scenario_id = req.id if req.id else str(uuid.uuid4())
         
@@ -1595,7 +2169,15 @@ async def save_scenario(req: SaveScenarioRequest):
 
 @app.delete("/api/scenarios/clear_all")
 async def clear_all_history():
-    """清除数据库中的所有对话历史"""
+    """
+    清除数据库中的所有对话历史。
+    
+    Returns:
+        Dict: 包含状态和删除数量的响应
+        
+    Raises:
+        HTTPException: 如果清除失败
+    """
     try:
         deleted_count = db.clear_all_conversations()
         print(f"[INFO] Cleared all history: {deleted_count} conversations deleted")
@@ -1606,7 +2188,18 @@ async def clear_all_history():
 
 @app.post("/api/scenarios/batch_delete")
 async def batch_delete_scenarios(req: dict):
-    """批量删除多个场景"""
+    """
+    批量删除多个场景。
+    
+    Args:
+        req: 包含场景 ID 列表的请求字典
+        
+    Returns:
+        Dict: 包含状态和删除数量的响应
+        
+    Raises:
+        HTTPException: 如果批量删除失败
+    """
     try:
         scenario_ids = req.get("ids", [])
         if not scenario_ids:
@@ -1625,7 +2218,18 @@ async def batch_delete_scenarios(req: dict):
 
 @app.post("/api/scenarios/{scenario_id}/toggle_pin")
 async def toggle_pin_scenario(scenario_id: str):
-    """切换对话的置顶状态"""
+    """
+    切换对话的置顶状态。
+    
+    Args:
+        scenario_id: 场景标识符
+        
+    Returns:
+        Dict: 包含状态和场景 ID 的响应
+        
+    Raises:
+        HTTPException: 如果场景未找到或切换失败
+    """
     try:
         success = db.toggle_pin(scenario_id)
         if success:
@@ -1641,7 +2245,18 @@ async def toggle_pin_scenario(scenario_id: str):
 
 @app.delete("/api/scenarios/{scenario_id}")
 async def delete_scenario(scenario_id: str):
-    """从数据库中删除对话"""
+    """
+    从数据库中删除对话。
+    
+    Args:
+        scenario_id: 场景标识符
+        
+    Returns:
+        Dict: 包含状态和场景 ID 的响应
+        
+    Raises:
+        HTTPException: 如果场景未找到或删除失败
+    """
     try:
         deleted = db.delete_conversation(scenario_id)
         if deleted:
@@ -1657,10 +2272,27 @@ async def delete_scenario(scenario_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 class GenerateTitleRequest(BaseModel):
-    history: List[Dict] # {role, content/message} 列表
+    """
+    生成标题请求模型。
+    
+    Attributes:
+        history: 对话历史列表，每项包含 role 和 content/message
+    """
+    history: List[Dict]  # {role, content/message} 列表
 
 @app.post("/api/generate_title")
 async def generate_title(req: GenerateTitleRequest):
+    """
+    为对话生成简洁标题。
+    
+    使用 LLM 根据对话历史生成 3-6 个词的标题。
+    
+    Args:
+        req: 生成标题请求
+        
+    Returns:
+        Dict: 包含生成的标题的响应
+    """
     try:
         # 提取用户消息以进行摘要
         # 限制为前几轮以生成标题
@@ -1934,6 +2566,20 @@ async def continue_session(req: ContinueRequest):
 
 @app.post("/api/step")
 async def step_session(req: StepRequest):
+    """
+    执行会话步骤。
+    
+    并行执行带水印和基线代理的单个步骤，并流式传输结果。
+    
+    Args:
+        req: 步骤请求
+        
+    Returns:
+        StreamingResponse: NDJSON 格式的流式响应
+        
+    Raises:
+        HTTPException: 如果会话未找到
+    """
     if req.sessionId not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     
@@ -2683,11 +3329,33 @@ async def step_session(req: StepRequest):
     return StreamingResponse(step_generator(), media_type="application/x-ndjson")
     
 class EvaluateRequest(BaseModel):
+    """
+    评估请求模型。
+    
+    Attributes:
+        sessionId: 会话标识符
+        language: 可选的语言代码（"en" 或 "zh"），默认为 "en"
+    """
     sessionId: str
     language: Optional[str] = "en"  # "en" or "zh"
 
 @app.post("/api/evaluate")
 async def evaluate_session(req: EvaluateRequest):
+    """
+    评估会话。
+    
+    使用 LLM 作为评判者比较带水印和基线代理的性能。
+    随机化顺序以避免偏见。
+    
+    Args:
+        req: 评估请求
+        
+    Returns:
+        Dict: 包含评分和理由的评估结果
+        
+    Raises:
+        HTTPException: 如果会话未找到或评估失败
+    """
     print(f"[INFO] Evaluate request for session: {req.sessionId}")
     print(f"[INFO] Available sessions: {list(sessions.keys())}")
     
@@ -2844,5 +3512,10 @@ async def evaluate_session(req: EvaluateRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
+    """
+    主入口点。
+    
+    使用 uvicorn 启动 FastAPI 应用。
+    """
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
