@@ -1,8 +1,8 @@
 """
-Visualization Module
-Responsibility: Generate visualization charts for experiment results
+可视化模块
+职责：为实验结果生成可视化图表
 
-Requirements: 9.1, 9.2, 9.3, 9.4, 9.5
+需求：9.1, 9.2, 9.3, 9.4, 9.5
 """
 
 import os
@@ -12,7 +12,7 @@ from datetime import datetime
 
 try:
     import matplotlib
-    matplotlib.use('Agg')  # Use non-interactive backend
+    matplotlib.use('Agg')  # 使用非交互式后端
     import matplotlib.pyplot as plt
     from matplotlib import font_manager
     import numpy as np
@@ -20,7 +20,7 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
-# Chinese font setup removed as English is used for all plots.
+# 已移除中文字体设置，因为所有图表都使用英文
 
 
 def plot_success_rate_comparison(
@@ -29,48 +29,48 @@ def plot_success_rate_comparison(
     title: str = 'ALFWorld Task Success Rate Comparison'
 ) -> bool:
     """
-    Implement task success rate comparison chart
+    实现任务成功率对比图表
     
-    Use matplotlib to create a bar chart comparing baseline and watermarked success rates.
+    使用 matplotlib 创建柱状图，比较基线和水印成功率
     
     Args:
-        metrics: Experiment metrics dictionary
-        output_path: Output file path
-        title: Chart title
+        metrics: 实验指标字典
+        output_path: 输出文件路径
+        title: 图表标题
     
     Returns:
-        success: Whether the chart was generated successfully
+        success: 图表是否成功生成
     
-    Requirements: 9.1
+    需求：9.1
     """
     if not MATPLOTLIB_AVAILABLE:
-        logging.warning("matplotlib not installed, cannot generate success rate comparison chart")
+        logging.warning("未安装 matplotlib，无法生成成功率对比图表")
         return False
     
     logger = logging.getLogger(__name__)
     
     try:
-        # matplotlib Chinese setup removed
+        # 已移除 matplotlib 中文设置
         
-        # Create figure
+        # 创建图形
         fig, ax = plt.subplots(figsize=(10, 6))
         
-        # Prepare data
+        # 准备数据
         categories = ['Baseline\n(No Watermark)', 'Experiment\n(Watermarked)']
         success_rates = [
             metrics['baseline_success_rate'] * 100,
             metrics['watermarked_success_rate'] * 100
         ]
         
-        # Create bar chart
+        # 创建柱状图
         bars = ax.bar(categories, success_rates, color=['#2ecc71', '#e74c3c'], alpha=0.8, width=0.6)
         
-        # Set labels and title
+        # 设置标签和标题
         ax.set_ylabel('Success Rate (%)', fontsize=12)
         ax.set_title(title, fontsize=14, fontweight='bold')
         ax.set_ylim(0, 100)
         
-        # Add labels on bars
+        # 在柱子上添加标签
         for bar, rate in zip(bars, success_rates):
             height = bar.get_height()
             ax.text(
@@ -83,7 +83,7 @@ def plot_success_rate_comparison(
                 fontweight='bold'
             )
         
-        # Add difference annotation
+        # 添加差异注释
         success_rate_diff = metrics.get('success_rate_diff', 0) * 100
         ax.text(
             0.5, 0.95,
@@ -95,20 +95,20 @@ def plot_success_rate_comparison(
             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5)
         )
         
-        # Add grid
+        # 添加网格
         ax.grid(axis='y', alpha=0.3, linestyle='--')
         ax.set_axisbelow(True)
         
-        # Save figure
+        # 保存图形
         plt.tight_layout()
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
         
-        logger.info(f"Success rate comparison chart saved: {output_path}")
+        logger.info(f"成功率对比图表已保存：{output_path}")
         return True
         
     except Exception as e:
-        logger.error(f"Error generating success rate comparison chart: {e}")
+        logger.error(f"生成成功率对比图表时出错：{e}")
         return False
 
 
@@ -118,22 +118,22 @@ def plot_avg_steps_comparison(
     title: str = 'ALFWorld Average Steps Comparison'
 ) -> bool:
     """
-    Implement average steps comparison chart
+    实现平均步数对比图表
     
-    Create bar chart comparing average steps.
+    创建柱状图比较平均步数
     
     Args:
-        metrics: Experiment metrics dictionary
-        output_path: Output file path
-        title: Chart title
+        metrics: 实验指标字典
+        output_path: 输出文件路径
+        title: 图表标题
     
     Returns:
-        success: Whether the chart was generated successfully
+        success: 图表是否成功生成
     
-    Requirements: 9.2
+    需求：9.2
     """
     if not MATPLOTLIB_AVAILABLE:
-        logging.warning("matplotlib not installed, cannot generate average steps comparison chart")
+        logging.warning("未安装 matplotlib，无法生成平均步数对比图表")
         return False
     
     logger = logging.getLogger(__name__)
@@ -367,54 +367,54 @@ def generate_all_visualizations(
     timestamp: str = None
 ) -> Dict[str, str]:
     """
-    Generate all visualization charts
+    生成所有可视化图表
     
     Args:
-        metrics: Experiment metrics dictionary
-        output_dir: Output directory path
-        timestamp: Timestamp (optional, for file naming)
+        metrics: 实验指标字典
+        output_dir: 输出目录路径
+        timestamp: 时间戳（可选，用于文件命名）
     
     Returns:
-        chart_paths: Dictionary of generated chart paths
+        chart_paths: 生成的图表路径字典
     
-    Requirements: 9.1, 9.2
+    需求：9.1, 9.2
     """
     logger = logging.getLogger(__name__)
     
     if not MATPLOTLIB_AVAILABLE:
-        logger.warning("matplotlib not installed, skipping all chart generation")
+        logger.warning("未安装 matplotlib，跳过所有图表生成")
         return {}
     
-    # Generate timestamp
+    # 生成时间戳
     if timestamp is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    # Create output directory
+    # 创建输出目录
     os.makedirs(output_dir, exist_ok=True)
     
     chart_paths = {}
     
-    # 1. Success rate comparison chart
+    # 1. 成功率对比图表
     success_rate_path = os.path.join(output_dir, f'success_rate_comparison_{timestamp}.png')
     if plot_success_rate_comparison(metrics, success_rate_path):
         chart_paths['success_rate_comparison'] = success_rate_path
     
-    # 2. Average steps comparison chart
+    # 2. 平均步数对比图表
     avg_steps_path = os.path.join(output_dir, f'avg_steps_comparison_{timestamp}.png')
     if plot_avg_steps_comparison(metrics, avg_steps_path):
         chart_paths['avg_steps_comparison'] = avg_steps_path
     
-    # 3. Success rate comparison by task type
+    # 3. 按任务类型的成功率对比
     if metrics.get('metrics_by_task_type'):
         task_type_success_path = os.path.join(output_dir, f'success_rate_by_task_type_{timestamp}.png')
         if plot_success_rate_by_task_type(metrics, task_type_success_path):
             chart_paths['success_rate_by_task_type'] = task_type_success_path
         
-        # 4. Average steps comparison by task type
+        # 4. 按任务类型的平均步数对比
         task_type_steps_path = os.path.join(output_dir, f'avg_steps_by_task_type_{timestamp}.png')
         if plot_steps_by_task_type(metrics, task_type_steps_path):
             chart_paths['avg_steps_by_task_type'] = task_type_steps_path
     
-    logger.info(f"Generated {len(chart_paths)} visualization charts")
+    logger.info(f"生成了 {len(chart_paths)} 个可视化图表")
     
     return chart_paths

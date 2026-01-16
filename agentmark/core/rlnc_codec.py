@@ -4,28 +4,27 @@ import numpy as np
 
 class DeterministicRLNC:
     """
-    Deterministic Random Linear Network Coding over GF(2).
-    Generates an infinite stream of coded bits from a fixed payload key.
+    GF(2) 上的确定性随机线性网络编码
+    从固定的载荷密钥生成无限的编码位流
     
-    The i-th coded bit is a linear combination of the payload bits,
-    where the coefficients are generated deterministically based on the
-    stream ID (key) and the bit index (i).
+    第 i 个编码位是载荷位的线性组合，
+    其中系数是基于流 ID（密钥）和位索引（i）确定性生成的
     """
     def __init__(self, payload_bits_str, stream_key=42):
         """
         Args:
-            payload_bits_str (str): The payload to encode, e.g., "10110011".
-            stream_key (int/str): A seed/key to randomize the coefficients.
+            payload_bits_str (str): 要编码的载荷，例如 "10110011"
+            stream_key (int/str): 用于随机化系数的种子/密钥
         """
         self.payload = [int(b) for b in payload_bits_str]
         self.n = len(self.payload)
         self.stream_key = stream_key
-        # Cache for generated bits if needed, but simple generation is fast enough.
+        # 如果需要，可以缓存生成的位，但简单生成已经足够快
 
     def get_bit(self, index):
         """
-        Get the i-th coded bit.
-        c_i = sum(coeff_j * p_j) mod 2, where coeff_j comes from PRG(stream_key, index).
+        获取第 i 个编码位
+        c_i = sum(coeff_j * p_j) mod 2，其中 coeff_j 来自 PRG(stream_key, index)
         """
         coeffs = self._generate_coeffs(index)
         
@@ -36,45 +35,45 @@ class DeterministicRLNC:
 
     def get_stream(self, start_index, length):
         """
-        Get a sequence of coded bits.
+        获取一系列编码位
         """
         return "".join([self.get_bit(i) for i in range(start_index, start_index + length)])
 
     def _generate_coeffs(self, index):
         """
-        Generate n coefficients deterministically for a given index.
+        为给定索引确定性生成 n 个系数
         """
-        # Use a hash of (stream_key, index) to seed, or simple Random with fixed seed.
-        # Python's random is Mersenne Twister, not safe for crypto but fine for coding distribution.
-        # To ensure absolute seeking capability without rewinding, we need a hash-based PRG or re-seeding.
-        # Re-seeding is fast enough for small n.
+        # 使用 (stream_key, index) 的哈希作为种子，或使用固定种子的简单 Random
+        # Python 的 random 是 Mersenne Twister，对于加密不安全但对于编码分布足够
+        # 为了确保绝对的寻址能力而不需要回退，我们需要基于哈希的 PRG 或重新设置种子
+        # 重新设置种子对于小 n 来说足够快
         
-        # Combine key and index into a unique seed
-        # efficient string seed
+        # 将密钥和索引组合成唯一的种子
+        # 高效的字符串种子
         seed_val = f"{self.stream_key}_{index}"
         rd = random.Random(seed_val)
         
-        # In GF(2), coefficients are 0 or 1.
-        # We need a non-zero row ideally, but random is fine for RLNC (prob of 0 row is 1/2^n).
-        # We can force non-zero if we want, but standard RLNC doesn't strictly require it per packet.
+        # 在 GF(2) 中，系数是 0 或 1
+        # 理想情况下我们需要非零行，但随机对于 RLNC 来说是可以的（零行的概率是 1/2^n）
+        # 如果需要，我们可以强制非零，但标准 RLNC 不严格要求每个数据包都这样
         return [rd.randint(0, 1) for _ in range(self.n)]
 
     def decode(self, received_indices, received_bits):
         """
-        Attempt to decode the payload from a set of received coded bits.
+        尝试从一组接收到的编码位解码载荷
         
         Args:
-            received_indices (list[int]): Indices of the received coded bits.
-            received_bits (list[int/str]): Values of the received coded bits.
+            received_indices (list[int]): 接收到的编码位的索引
+            received_bits (list[int/str]): 接收到的编码位的值
             
         Returns:
-            str: Decoded payload bits if successful, None otherwise.
+            str: 如果成功则返回解码的载荷位，否则返回 None
         """
         m = len(received_indices)
         if m < self.n:
             return None
         
-        # Build the system Matrix * Payload = Received
+        # 构建系统 Matrix * Payload = Received
         matrix = []
         vector = []
         
@@ -86,10 +85,10 @@ class DeterministicRLNC:
         matrix = np.array(matrix, dtype=int)
         vector = np.array(vector, dtype=int)
         
-        # Solve
-        # We can use the Gaussian elimination from previous analysis
-        # Or reuse self-contained solver here?
-        # Let's include the solver here for completeness
+        # 求解
+        # 我们可以使用之前分析中的高斯消元
+        # 或者在这里重用自包含的求解器？
+        # 让我们在这里包含求解器以保持完整性
         
         return self._solve_gf2(matrix, vector)
 
@@ -120,10 +119,10 @@ class DeterministicRLNC:
             
         if len(pivot_cols) == cols:
             x = np.zeros(cols, dtype=int)
-            # Back sub is trivial because we diagonalized (mostly)
-            # Actually full Gauss-Jordan above makes pivots the only non-zeros in columns
+            # 回代很简单，因为我们已经对角化了（大部分）
+            # 实际上上面的完整高斯-约旦使得主元是列中唯一的非零元素
             for i, p_col in enumerate(pivot_cols):
-                # The pivot row 'i' corresponds to variable 'p_col'
+                # 主元行 'i' 对应变量 'p_col'
                 x[p_col] = augmented[i, -1]
             return "".join(map(str, x))
         else:

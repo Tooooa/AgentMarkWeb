@@ -1,19 +1,19 @@
 """
-Experiment logging module.
-Responsibilities: handle file writes and statistics computation.
+实验日志模块
+职责：处理文件写入和统计计算
 """
 
 
 def initialize_log_file(log_path, round_idx, total_rounds, verbose_log_path=None, enable_verbose=False):
     """
-    Initialize log file and write round header.
+    初始化日志文件并写入轮次标题
 
     Args:
-        log_path (str): Log file path
-        round_idx (int): Current round index (0-based)
-        total_rounds (int): Total number of rounds
-        verbose_log_path (str, optional): Verbose log file path
-        enable_verbose (bool, optional): Whether to enable verbose logging
+        log_path (str): 日志文件路径
+        round_idx (int): 当前轮次索引（从 0 开始）
+        total_rounds (int): 总轮次数
+        verbose_log_path (str, optional): 详细日志文件路径
+        enable_verbose (bool, optional): 是否启用详细日志
     """
     mode = 'w' if round_idx == 0 else 'a'
     with open(log_path, mode, encoding='utf-8') as f:
@@ -27,12 +27,12 @@ def initialize_log_file(log_path, round_idx, total_rounds, verbose_log_path=None
 
 def log_round_results(log_path, round_idx, round_data):
     """
-    Format a single round's data and append to the log.
+    格式化单轮数据并追加到日志
 
     Args:
-        log_path (str): Log file path
-        round_idx (int): Current round index (1-based)
-        round_data (dict): Dict with round data
+        log_path (str): 日志文件路径
+        round_idx (int): 当前轮次索引（从 1 开始）
+        round_data (dict): 包含轮次数据的字典
     """
     with open(log_path, 'a', encoding='utf-8') as f:
         f.write(f"{round_idx}:\n")
@@ -48,7 +48,7 @@ def log_round_results(log_path, round_idx, round_data):
         f.write(f"  watermark_hit: {round_data['watermark_hit']}\n")
         f.write(f"  baseline_hit_target: {round_data['baseline_hit_target']}\n")
         
-        # If differential-engine data exists, log it as well
+        # 如果存在差分引擎数据，也记录下来
         if 'num_bits_embedded' in round_data:
             f.write(f"  num_bits_embedded: {round_data['num_bits_embedded']}\n")
         if 'bit_index' in round_data:
@@ -61,12 +61,12 @@ def log_round_results(log_path, round_idx, round_data):
 
 def log_long_responses(verbose_log_path, long_responses, enable_verbose=False):
     """
-    Log detailed API responses.
+    记录详细的 API 响应
 
     Args:
-        verbose_log_path (str): Verbose log file path
-        long_responses (dict): Dict of long responses
-        enable_verbose (bool, optional): Whether verbose logging is enabled
+        verbose_log_path (str): 详细日志文件路径
+        long_responses (dict): 详细响应字典
+        enable_verbose (bool, optional): 是否启用详细日志
     """
     if not enable_verbose or not verbose_log_path:
         return
@@ -79,11 +79,11 @@ def log_long_responses(verbose_log_path, long_responses, enable_verbose=False):
 
 def log_summary(log_path, stats, round_idx, total_duration, epoch_num):
     """
-    Write final statistics to log.
+    将最终统计信息写入日志
 
     Args:
-        log_path (str): Log file path
-        stats (dict): Statistics dict
+        log_path (str): 日志文件路径
+        stats (dict): 统计字典
     """
     with open(log_path, 'a', encoding='utf-8') as f:
         f.write("=== Statistics ===\n")
@@ -100,7 +100,7 @@ def log_summary(log_path, stats, round_idx, total_duration, epoch_num):
         f.write(f"Round {round_idx + 1} baseline hits: {stats['original_hit_count']}\n")
         f.write(f"Round {round_idx + 1} baseline hit ratio: {stats['original_hit_ratio']:.2f}%\n")
 
-        # If differential-engine stats exist, log them
+        # 如果存在差分引擎统计，记录下来
         if 'total_bits_embedded' in stats:
             f.write(f"Round {round_idx + 1} total bits embedded: {stats['total_bits_embedded']}\n")
         if 'bit_stream_usage' in stats:
@@ -111,14 +111,14 @@ def log_summary(log_path, stats, round_idx, total_duration, epoch_num):
 
 def calculate_statistics(all_rounds_data, epoch_num):
     """
-    Compute statistics (hit rates, differences) from all rounds.
+    从所有轮次计算统计信息（命中率、差异）
 
     Args:
-        all_rounds_data (list): All round data
-        epoch_num (int): Total epochs
+        all_rounds_data (list): 所有轮次数据
+        epoch_num (int): 总轮次数
 
     Returns:
-        dict: Statistics dict
+        dict: 统计字典
     """
     different_behavior_count = 0
     watermark_hit_count = 0
@@ -126,23 +126,23 @@ def calculate_statistics(all_rounds_data, epoch_num):
     total_bits_embedded = 0
     
     for round_data in all_rounds_data:
-        # Count behavior differences
+        # 计算行为差异
         if not round_data["behaviors_match"]:
             different_behavior_count += 1
         
-        # Count watermark hits
+        # 计算水印命中
         if round_data["watermark_hit"]:
             watermark_hit_count += 1
         
-        # Count baseline behavior hits
+        # 计算基线行为命中
         if round_data.get("baseline_hit_target", round_data.get("original_hit", False)):
             original_hit_count += 1
         
-        # If differential-engine data exists, count embedded bits
+        # 如果存在差分引擎数据，计算嵌入的位数
         if 'num_bits_embedded' in round_data:
             total_bits_embedded += round_data['num_bits_embedded']
     
-    # Compute ratios
+    # 计算比率
     stats = {
         'total_rounds': epoch_num,
         'different_behavior_count': different_behavior_count,
@@ -153,7 +153,7 @@ def calculate_statistics(all_rounds_data, epoch_num):
         'original_hit_ratio': (original_hit_count / epoch_num) * 100 if epoch_num > 0 else 0,
     }
     
-    # If differential engine used, add related stats
+    # 如果使用了差分引擎，添加相关统计
     if total_bits_embedded > 0:
         stats['total_bits_embedded'] = total_bits_embedded
     
@@ -162,13 +162,13 @@ def calculate_statistics(all_rounds_data, epoch_num):
 
 def print_statistics(stats, round_idx, total_duration, epoch_num):
     """
-    Print statistics to console.
+    将统计信息打印到控制台
 
     Args:
-        stats (dict): Statistics dict
-        round_idx (int): Current round index (0-based)
-        total_duration (float): Total duration (seconds)
-        epoch_num (int): Epochs per round
+        stats (dict): 统计字典
+        round_idx (int): 当前轮次索引（从 0 开始）
+        total_duration (float): 总持续时间（秒）
+        epoch_num (int): 每轮的轮次数
     """
     print(f"\nRound {round_idx + 1} total duration: {total_duration:.2f}s")
     print(f"Round {round_idx + 1} avg duration per epoch: {(total_duration/epoch_num):.2f}s")
@@ -179,6 +179,6 @@ def print_statistics(stats, round_idx, total_duration, epoch_num):
     print(f"Round {round_idx + 1} baseline hits: {stats['original_hit_count']}")
     print(f"Round {round_idx + 1} baseline hit ratio: {stats['original_hit_ratio']:.2f}%")
 
-    # If differential-engine stats exist, print them
+    # 如果存在差分引擎统计，打印出来
     if 'total_bits_embedded' in stats:
         print(f"Round {round_idx + 1} total bits embedded: {stats['total_bits_embedded']}")

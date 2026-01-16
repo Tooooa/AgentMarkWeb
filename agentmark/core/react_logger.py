@@ -1,6 +1,6 @@
 """
-ReAct-style JSON trajectory logger.
-Records full interaction history based on the ReAct paper format.
+ReAct 风格的 JSON 轨迹记录器
+根据 ReAct 论文格式记录完整的交互历史
 """
 
 import json
@@ -12,9 +12,9 @@ from dataclasses import asdict
 
 class ReActTrajectoryLogger:
     """
-    ReAct-style trajectory logger.
+    ReAct 风格的轨迹记录器
 
-    Trajectory format adapted from the ReAct paper:
+    轨迹格式改编自 ReAct 论文：
     {
         "task_id": 10,
         "task_type": "pick_and_place_simple",
@@ -28,9 +28,9 @@ class ReActTrajectoryLogger:
             {
                 "step": 1,
                 "observation": "You are in the middle of a room...",
-                "interaction_history": [...],  // ReAct-style history
+                "interaction_history": [...],  // ReAct 风格历史
                 "admissible_commands": ["go to cabinet 1", ...],
-                "thought": {  // LLM "thought" process (probability distribution)
+                "thought": {  // LLM "思考"过程（概率分布）
                     "probabilities": {
                         "go to cabinet 1": 0.25,
                         "go to countertop 1": 0.35,
@@ -41,7 +41,7 @@ class ReActTrajectoryLogger:
                 "action": "go to countertop 1",
                 "reward": 0.0,
                 "done": false,
-                "watermark_info": {  // watermark mode only
+                "watermark_info": {  // 仅水印模式
                     "bits_embedded": 2,
                     "target_behaviors": [...],
                     "context_key": "..."
@@ -59,17 +59,17 @@ class ReActTrajectoryLogger:
     
     def __init__(self, output_dir: str, experiment_name: str = "alfworld_react"):
         """
-        Initialize the logger.
+        初始化记录器
 
         Args:
-            output_dir: Output directory.
-            experiment_name: Experiment name.
+            output_dir: 输出目录
+            experiment_name: 实验名称
         """
         self.output_dir = output_dir
         self.experiment_name = experiment_name
         os.makedirs(output_dir, exist_ok=True)
         
-        # Build file paths
+        # 构建文件路径
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.trajectory_file = os.path.join(
             output_dir, 
@@ -84,7 +84,7 @@ class ReActTrajectoryLogger:
             f"experiment_log.json"
         )
         
-        # Initialize experiment log
+        # 初始化实验日志
         self.experiment_log = {
             "experiment_name": experiment_name,
             "start_time": datetime.now().isoformat(),
@@ -97,11 +97,11 @@ class ReActTrajectoryLogger:
         interaction_history: List[Dict] = None
     ):
         """
-        Log the full trajectory for a single task (ReAct format).
+        记录单个任务的完整轨迹（ReAct 格式）
 
         Args:
-            task_result: TaskResult object.
-            interaction_history: ReAct-style interaction history.
+            task_result: TaskResult 对象
+            interaction_history: ReAct 风格的交互历史
         """
         task_log = {
             "task_id": task_result.task_id,
@@ -113,7 +113,7 @@ class ReActTrajectoryLogger:
             "trajectory": []
         }
         
-        # Record step details
+        # 记录步骤详情
         if task_result.trajectory:
             for step_data in task_result.trajectory:
                 step_log = {
@@ -136,7 +136,7 @@ class ReActTrajectoryLogger:
                     "done": step_data.done
                 }
                 
-                # Add watermark info (if applicable)
+                # 添加水印信息（如果适用）
                 if task_result.use_watermark:
                     step_log["watermark_info"] = {
                         "bits_embedded": step_data.num_bits_embedded,
@@ -146,18 +146,18 @@ class ReActTrajectoryLogger:
                 
                 task_log["trajectory"].append(step_log)
         
-        # Add metadata
+        # 添加元数据
         task_log["metadata"] = {
             "timestamp": datetime.now().isoformat()
         }
         
-        # Write JSONL (one task per entry with indent for readability)
+        # 写入 JSONL（每个任务一个条目，带缩进以提高可读性）
         with open(self.trajectory_file, 'a', encoding='utf-8') as f:
-            # Use indent=2 for readability while keeping JSONL compatibility.
-            # Add a blank line after each entry for easier manual reading.
+            # 使用 indent=2 提高可读性，同时保持 JSONL 兼容性
+            # 在每个条目后添加空行以便于手动阅读
             f.write(json.dumps(task_log, ensure_ascii=False, indent=2) + '\n\n')
         
-        # Update experiment log
+        # 更新实验日志
         self.experiment_log["tasks"].append({
             "task_id": task_result.task_id,
             "success": task_result.success,
@@ -171,19 +171,19 @@ class ReActTrajectoryLogger:
         current_step: int
     ) -> List[Dict]:
         """
-        Format interaction history for the current step context.
+        为当前步骤上下文格式化交互历史
 
         Args:
-            interaction_history: Full interaction history.
-            current_step: Current step number.
+            interaction_history: 完整的交互历史
+            current_step: 当前步骤编号
 
         Returns:
-            Formatted history records.
+            格式化的历史记录
         """
         if not interaction_history:
             return []
         
-        # Only include history before the current step
+        # 仅包含当前步骤之前的历史
         history_before_current = interaction_history[:current_step-1]
         
         formatted = []
@@ -192,7 +192,7 @@ class ReActTrajectoryLogger:
                 "step": i,
                 "observation": step.get('observation', ''),
                 "action": step.get('action', ''),
-                "result": "Success" if step.get('reward', 0) > 0 else "Continue"
+                "result": "成功" if step.get('reward', 0) > 0 else "继续"
             })
         
         return formatted
@@ -203,11 +203,11 @@ class ReActTrajectoryLogger:
         top_k: int = 5
     ) -> List[Dict[str, float]]:
         """
-        Get top-k actions by probability.
+        按概率获取前 k 个动作
 
         Args:
-            probabilities: Probability distribution.
-            top_k: Number of actions to return.
+            probabilities: 概率分布
+            top_k: 要返回的动作数量
 
         Returns:
             [{"action": "...", "probability": 0.xx}, ...]
@@ -224,8 +224,8 @@ class ReActTrajectoryLogger:
         ]
     
     def save_summary(self):
-        """Save the experiment summary."""
-        # Calculate statistics
+        """保存实验摘要"""
+        # 计算统计信息
         total_tasks = len(self.experiment_log["tasks"])
         successful_tasks = sum(
             1 for t in self.experiment_log["tasks"] if t["success"]
@@ -235,7 +235,7 @@ class ReActTrajectoryLogger:
         )
         avg_steps = total_steps / total_tasks if total_tasks > 0 else 0
         
-        # Update experiment log
+        # 更新实验日志
         self.experiment_log["end_time"] = datetime.now().isoformat()
         self.experiment_log["summary"] = {
             "total_tasks": total_tasks,
@@ -245,50 +245,50 @@ class ReActTrajectoryLogger:
             "average_steps": avg_steps
         }
         
-        # Save JSON experiment log
+        # 保存 JSON 实验日志
         with open(self.experiment_log_file, 'w', encoding='utf-8') as f:
             json.dump(self.experiment_log, f, ensure_ascii=False, indent=2)
         
-        # Save text summary
+        # 保存文本摘要
         with open(self.summary_file, 'w', encoding='utf-8') as f:
             f.write("=" * 80 + "\n")
-            f.write("ALFWorld ReAct Experiment Summary\n")
-            f.write(f"Experiment Name: {self.experiment_name}\n")
+            f.write("ALFWorld ReAct 实验摘要\n")
+            f.write(f"实验名称：{self.experiment_name}\n")
             f.write("=" * 80 + "\n\n")
             
-            f.write(f"Start Time: {self.experiment_log['start_time']}\n")
-            f.write(f"End Time: {self.experiment_log['end_time']}\n\n")
+            f.write(f"开始时间：{self.experiment_log['start_time']}\n")
+            f.write(f"结束时间：{self.experiment_log['end_time']}\n\n")
 
-            f.write(f"Total Tasks: {total_tasks}\n")
-            f.write(f"Successful Tasks: {successful_tasks}\n")
-            f.write(f"Success Rate: {successful_tasks / total_tasks * 100:.2f}%\n")
-            f.write(f"Total Steps: {total_steps}\n")
-            f.write(f"Average Steps: {avg_steps:.2f}\n\n")
+            f.write(f"总任务数：{total_tasks}\n")
+            f.write(f"成功任务数：{successful_tasks}\n")
+            f.write(f"成功率：{successful_tasks / total_tasks * 100:.2f}%\n")
+            f.write(f"总步数：{total_steps}\n")
+            f.write(f"平均步数：{avg_steps:.2f}\n\n")
 
-            f.write("Task Details:\n")
+            f.write("任务详情：\n")
             for task in self.experiment_log["tasks"]:
-                status = "OK" if task["success"] else "FAIL"
+                status = "成功" if task["success"] else "失败"
                 f.write(
-                    f"  {status} Task {task['task_id']}: "
-                    f"{task['steps']} steps, reward {task['reward']:.2f}\n"
+                    f"  {status} 任务 {task['task_id']}："
+                    f"{task['steps']} 步，奖励 {task['reward']:.2f}\n"
                 )
         
         return self.experiment_log_file, self.summary_file
     
     def get_trajectory_file(self) -> str:
-        """Return the trajectory file path."""
+        """返回轨迹文件路径"""
         return self.trajectory_file
 
 
 def create_react_logger(output_dir: str, experiment_name: str) -> ReActTrajectoryLogger:
     """
-    Create a ReAct-style trajectory logger.
+    创建 ReAct 风格的轨迹记录器
 
     Args:
-        output_dir: Output directory.
-        experiment_name: Experiment name.
+        output_dir: 输出目录
+        experiment_name: 实验名称
 
     Returns:
-        ReActTrajectoryLogger instance.
+        ReActTrajectoryLogger 实例
     """
     return ReActTrajectoryLogger(output_dir, experiment_name)

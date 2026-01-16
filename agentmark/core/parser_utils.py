@@ -1,6 +1,6 @@
 """
-Parser utilities module.
-Responsibilities: parse structured data from LLM responses.
+解析工具模块
+职责：从 LLM 响应中解析结构化数据
 """
 
 import re
@@ -9,25 +9,25 @@ import json
 
 def extract_probabilities(response_text, behaviors):
     """
-    Extract behavior probabilities from API response text.
+    从 API 响应文本中提取行为概率
 
-    Supported strategies:
-    1. Code block: parse ```json``` block (preferred)
-    2. JSON parse: parse the first JSON object in the response
-    3. Regex fallback: match each behavior probability with regex
+    支持的策略：
+    1. 代码块：解析 ```json``` 块（首选）
+    2. JSON 解析：解析响应中的第一个 JSON 对象
+    3. 正则表达式回退：使用正则表达式匹配每个行为概率
 
-    Extended support for ALFWorld command format:
-    - Commands with special characters (e.g., "go to cabinet 1", "take soapbar 1 from countertop 1")
-    - Partial probability extraction (returns partial dict)
-    - Responses that include a Brief Analysis section
+    扩展支持 ALFWorld 命令格式：
+    - 带特殊字符的命令（例如 "go to cabinet 1", "take soapbar 1 from countertop 1"）
+    - 部分概率提取（返回部分字典）
+    - 包含简要分析部分的响应
 
     Args:
-        response_text (str): API response text
-        behaviors (list): Behavior list
+        response_text (str): API 响应文本
+        behaviors (list): 行为列表
 
     Returns:
-        dict: Probability dict, or None if extraction fails.
-              Returns partial dict if only some probabilities are found.
+        dict: 概率字典，如果提取失败则返回 None
+              如果只找到部分概率，则返回部分字典
 
     Example:
         >>> response = 'Brief Analysis: xxx\n```json\n{"like": 0.3}\n```'
@@ -40,7 +40,7 @@ def extract_probabilities(response_text, behaviors):
         >>> extract_probabilities(response, behaviors)
         {'like': 0.3, 'favorite': 0.2, 'share': 0.5}
     """
-    # Strategy 0: prefer JSON code block
+    # 策略 0：优先使用 JSON 代码块
     try:
         code_block_pattern = r"```json\s*\n([\s\S]*?)\n```"
         code_match = re.search(code_block_pattern, response_text)
@@ -48,11 +48,11 @@ def extract_probabilities(response_text, behaviors):
             json_text = code_match.group(1).strip()
             parsed = json.loads(json_text)
             
-            # Check if all behavior keys exist
+            # 检查是否所有行为键都存在
             if all(b in parsed for b in behaviors):
                 return {b: float(parsed[b]) for b in behaviors}
             
-            # Support partial extraction
+            # 支持部分提取
             partial_result = {}
             for b in behaviors:
                 if b in parsed:
@@ -64,24 +64,24 @@ def extract_probabilities(response_text, behaviors):
             if partial_result:
                 return partial_result
     except Exception:
-        # Parsing failed, try next strategy
+        # 解析失败，尝试下一个策略
         pass
     
-    # Strategy 1: parse the first JSON object (more robust)
+    # 策略 1：解析第一个 JSON 对象（更健壮）
     try:
-        # Find first brace-wrapped JSON chunk
+        # 查找第一个大括号包裹的 JSON 块
         m = re.search(r"\{[\s\S]*?\}", response_text)
         if m:
             json_text = m.group(0)
-            # Models may use single quotes; try to make valid JSON
+            # 模型可能使用单引号；尝试转换为有效 JSON
             json_text_fixed = json_text.replace("'", '"')
             parsed = json.loads(json_text_fixed)
             
-            # Check if all behavior keys exist
+            # 检查是否所有行为键都存在
             if all(b in parsed for b in behaviors):
                 return {b: float(parsed[b]) for b in behaviors}
             
-            # Support partial extraction (ALFWorld-specific)
+            # 支持部分提取（ALFWorld 特定）
             partial_result = {}
             for b in behaviors:
                 if b in parsed:
@@ -93,15 +93,15 @@ def extract_probabilities(response_text, behaviors):
             if partial_result:
                 return partial_result
     except Exception:
-        # Parsing failed, try regex fallback
+        # 解析失败，尝试正则表达式回退
         pass
 
-    # Strategy 2: regex per behavior (supports partial matches)
+    # 策略 2：每个行为使用正则表达式（支持部分匹配）
     partial_result = {}
     for behavior in behaviors:
-        # Escape special characters for ALFWorld commands
+        # 为 ALFWorld 命令转义特殊字符
         escaped_behavior = re.escape(behavior)
-        # Pattern: "behavior": 0.5 or 'behavior': 0.5
+        # 模式："behavior": 0.5 或 'behavior': 0.5
         pattern = r'["\']' + escaped_behavior + r'["\']\s*:\s*([0-9]*\.?[0-9]+)'
         match = re.search(pattern, response_text)
         if match:
@@ -113,7 +113,7 @@ def extract_probabilities(response_text, behaviors):
     if partial_result:
         return partial_result
 
-    # Strategy 3: match full set of behaviors (legacy fallback)
+    # 策略 3：匹配完整的行为集（传统回退）
     pattern_parts = []
     for behavior in behaviors:
         pattern_parts.append(r'"' + re.escape(behavior) + r'"\s*:\s*([0-9]*\.?[0-9]+)')
@@ -132,22 +132,22 @@ def extract_probabilities(response_text, behaviors):
 
 def extract_and_normalize_probabilities(response_text, admissible_commands, logger=None):
     """
-    Extract and normalize probabilities from LLM response (multi-level fallback).
+    从 LLM 响应中提取并归一化概率（多级回退）
 
-    Three-level fallback strategy:
-    1. Strategy 1: extract all probabilities and normalize
-    2. Strategy 2: partial normalization, set missing to 0
-    3. Strategy 3: uniform distribution on total failure
+    三级回退策略：
+    1. 策略 1：提取所有概率并归一化
+    2. 策略 2：部分归一化，缺失的设为 0
+    3. 策略 3：完全失败时使用均匀分布
 
-    All fallback usage is logged.
+    所有回退使用都会被记录
 
     Args:
-        response_text (str): LLM response text
-        admissible_commands (list): Admissible commands
-        logger (logging.Logger, optional): Logger for fallback usage
+        response_text (str): LLM 响应文本
+        admissible_commands (list): 可接受的命令
+        logger (logging.Logger, optional): 用于记录回退使用的日志记录器
 
     Returns:
-        dict: Normalized probability dict {command: probability}
+        dict: 归一化的概率字典 {command: probability}
 
     Example:
         >>> response = '{"go to cabinet 1": 0.3, "take soapbar 1": 0.7}'

@@ -1,18 +1,18 @@
 """
-Prompt utility module.
-Purpose: formatting helpers for LLM prompt generation.
+提示工具模块
+目的：为 LLM 提示生成提供格式化辅助函数
 """
 
 
 def format_behaviors_list(behaviors):
     """
-    Format a list of behaviors as a bullet list string.
+    将行为列表格式化为项目符号列表字符串
 
     Args:
-        behaviors (list): Behavior list.
+        behaviors (list): 行为列表
 
     Returns:
-        str: Formatted behavior list string.
+        str: 格式化的行为列表字符串
 
     Example:
         >>> behaviors = ["like", "save", "share"]
@@ -24,13 +24,13 @@ def format_behaviors_list(behaviors):
 
 def generate_behaviors_example(behaviors):
     """
-    Generate an example JSON string for behavior probabilities.
+    为行为概率生成示例 JSON 字符串
 
     Args:
-        behaviors (list): Behavior list.
+        behaviors (list): 行为列表
 
     Returns:
-        str: Example JSON string.
+        str: 示例 JSON 字符串
 
     Example:
         >>> behaviors = ["like", "save", "share"]

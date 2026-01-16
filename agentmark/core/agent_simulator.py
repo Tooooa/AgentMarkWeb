@@ -1,6 +1,6 @@
 """
-Model interaction module (Agent Simulator).
-Responsibilities: wrap all LLM API interaction logic.
+模型交互模块（Agent Simulator）
+职责：封装所有 LLM API 交互逻辑
 """
 
 from .prompt_utils import format_behaviors_list, generate_behaviors_example
@@ -9,25 +9,25 @@ from .parser_utils import extract_probabilities
 
 def get_behavior_probabilities(client, model, role_config, event, behaviors, probability_template):
     """
-    Get a probability distribution over behaviors given an event.
+    根据事件获取行为的概率分布
 
     Args:
-        client: OpenAI client instance
-        model: Model name
-        role_config: Role config (name, profile, system_prompt)
-        event: Formatted event text
-        behaviors: Behavior types list, e.g. ['like', 'favorite', 'share', ...]
-        probability_template: Prompt template for probability estimation
+        client: OpenAI 客户端实例
+        model: 模型名称
+        role_config: 角色配置（名称、简介、系统提示）
+        event: 格式化的事件文本
+        behaviors: 行为类型列表，例如 ['like', 'favorite', 'share', ...]
+        probability_template: 概率估计的提示模板
 
     Returns:
         tuple: (probabilities_dict, raw_response_text)
-            - probabilities_dict: Probability dict, e.g. {'like': 0.3, 'favorite': 0.2, ...}
-            - raw_response_text: Raw API response text
+            - probabilities_dict: 概率字典，例如 {'like': 0.3, 'favorite': 0.2, ...}
+            - raw_response_text: 原始 API 响应文本
     """
     name = role_config['name']
     profile = role_config['profile']
     
-    # Build probability prompt
+    # 构建概率提示
     probability_prompt = probability_template.format(
         name=name,
         event=event,
@@ -35,10 +35,10 @@ def get_behavior_probabilities(client, model, role_config, event, behaviors, pro
         behaviors_example=generate_behaviors_example(behaviors)
     )
     
-    print("Probability prompt:")
+    print("概率提示：")
     print(probability_prompt)
     
-    # Call API to get behavior probabilities
+    # 调用 API 获取行为概率
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -53,52 +53,52 @@ def get_behavior_probabilities(client, model, role_config, event, behaviors, pro
         ]
     )
     
-    # Get response text
+    # 获取响应文本
     response_text = response.choices[0].message.content
-    print("\nProbability response:")
+    print("\n概率响应：")
     print(response_text)
     
-    # Extract probabilities
+    # 提取概率
     probabilities = extract_probabilities(response_text, behaviors)
     
     if probabilities:
-        print("\nExtracted probabilities:")
+        print("\n提取的概率：")
         print(probabilities)
     else:
-        print("\nWarning: failed to extract probabilities")
+        print("\n警告：提取概率失败")
     
     return probabilities, response_text
 
 
 def get_behavior_description(client, model, role_config, event, behavior, behavior_template):
     """
-    Get a detailed description for a selected behavior given an event.
+    根据事件获取所选行为的详细描述
 
     Args:
-        client: OpenAI client instance
-        model: Model name
-        role_config: Role config
-        event: Formatted event text
-        behavior: Selected behavior, e.g. "like"
-        behavior_template: Prompt template for behavior description
+        client: OpenAI 客户端实例
+        model: 模型名称
+        role_config: 角色配置
+        event: 格式化的事件文本
+        behavior: 选定的行为，例如 "like"
+        behavior_template: 行为描述的提示模板
 
     Returns:
-        str: Model-generated behavior description
+        str: 模型生成的行为描述
     """
     name = role_config['name']
     profile = role_config['profile']
     
-    # Build behavior description prompt
+    # 构建行为描述提示
     behavior_prompt = behavior_template.format(
         name=name,
         event=event,
         behavior=behavior
     )
     
-    print(f"\nBehavior prompt (behavior: {behavior}):")
+    print(f"\n行为提示（行为：{behavior}）：")
     print(behavior_prompt)
     
-    # Call API for behavior description
+    # 调用 API 获取行为描述
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -114,7 +114,7 @@ def get_behavior_description(client, model, role_config, event, behavior, behavi
     )
     
     behavior_description = response.choices[0].message.content
-    print("\nBehavior description:")
+    print("\n行为描述：")
     print(behavior_description)
     
     return behavior_description
