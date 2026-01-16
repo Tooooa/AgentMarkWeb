@@ -2620,7 +2620,7 @@ async def step_session(req: StepRequest):
             }) + "\n"
         return StreamingResponse(immediate_done(), media_type="application/x-ndjson")
 
-    # --- Generic Single Agent Step Function ---
+    # --- 通用单代理步骤函数 ---
     async def step_single_agent(
         agent_state: AgentState,
         is_watermarked: bool,
@@ -2629,6 +2629,19 @@ async def step_session(req: StepRequest):
         mirror_agent: Optional[str] = None,
         capture_output: bool = False,
     ):
+        """
+        执行单个代理的步骤。
+        
+        Args:
+            agent_state: 代理状态
+            is_watermarked: 是否为带水印代理
+            output_queue: 输出队列，用于流式传输结果
+            mirror_agent: 可选的镜像代理名称，用于共享思考
+            capture_output: 是否捕获输出以供共享
+            
+        Returns:
+            Tuple: (最终数据, 水印数据, 消耗的比特数, 共享载荷)
+        """
         step_start_time = time.time()
         
         # 检查完成状态
